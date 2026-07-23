@@ -18,6 +18,9 @@ dist/
 *.swo
 *~
 
+# APK
+*.apk
+
 # OS
 .DS_Store
 Thumbs.db

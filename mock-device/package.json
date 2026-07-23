@@ -1,0 +1,21 @@
+{
+  "name": "agentbridge-mock-device",
+  "version": "0.1.0",
+  "description": "Mock device client for AgentBridge Core WS testing",
+  "main": "mock-device.js",
+  "scripts": {
+    "start": "node mock-device.js",
+    "phone": "node mock-device.js --device-type phone",
+    "glass": "node mock-device.js --device-type ar_glasses",
+    "watch": "node mock-device.js --device-type smartwatch",
+    "buds": "node mock-device.js --device-type earbuds",
+    "all": "node mock-device.js --simulate-all",
+    "test": "node roundtrip-test.js",
+    "demo": "node orchestrator.js --scenario full --mode auto --speed normal",
+    "demo:step": "node orchestrator.js --scenario full --mode step --speed slow",
+    "demo:quick": "node orchestrator.js --scenario short --speed fast"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

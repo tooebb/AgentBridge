@@ -189,18 +189,38 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 - **中风险** (0.3–0.7)：需确认审批
 - **高风险** (≥0.7 或 blockOnMobile)：仅可在 PC 端审批
 
-## 当前状态 (2026-07-20)
+## 当前状态 (2026-07-23)
 
 | 模块 | 状态 | 说明 |
 |------|------|------|
-| Middleware Core | ✓ 完成 | 全部 6 端点 · 状态机 9 转移验证通过 |
+| Middleware Core | ✓ 完成 | 全部 6 端点 · 状态机 18 转移 · forGlass 6 事件类型独立渲染 |
 | Agent Adapter | ✓ 完成 | Claude Code 端到端集成测试通过 |
 | Web Dashboard | ✓ 完成 | 实时推送 + 历史事件 · 全事件类型展示 |
-| Mock Device Client | 待开发 | 验证 Core→设备 管道（无需真机） |
-| Phone App (AgentBridgeService) | 待开发 | 阻塞于无 Android 真机 |
-| Glass App (AgentActionHandler) | 待开发 | 阻塞于无 Android 真机 |
+| Mock Device Client | ✓ 完成 | phone/watch/glass/earbuds 四端模拟 · `npm run phone` 启动 |
+| Glass App (WebSocket 客户端) | 待开发 | WS 直连 Core + CXR 管 install/start 生命周期 |
+| Phone App (CXR 生命周期) | 待开发 | CXR-L SDK 仅用于 `appUploadAndInstall` / `appStart` |
 | 数据库 (PostgreSQL/Redis) | 待开发 | 当前使用内存存储 |
 | 认证/安全 | 待开发 | — |
+
+### CXR-L SDK 联调（设备：华为 NOP_AN00 + Rokid RG-glasses）
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| CustomView | ✅ 通过 | 手机 JSON 布局 → 眼镜渲染 |
+| CustomApp 安装 | ✅ 通过 | `appUploadAndInstall` 成功（WiFi 必须空闲） |
+| CustomApp 启动 | ✅ 通过 | `appStart` → `onOpenAppResult: true` |
+| 眼镜→手机 (sendMessage) | ✅ 通过 | 按键事件回传正常，走 Notify 协议 |
+| 手机→眼镜 (sendCustomCmd) | ❌ 放弃 | `cxrservice` 路由为 ShortMessage 类型，不转发到 CustomApp 订阅回调，闭源无法修复 |
+
+### 眼镜数据通道：最终方案
+
+**CXR Caps 全双工（方案 A）→ 已放弃**。`sendCustomCmd`（ShortMessage）与 `sendMessage`（Notify）走不同协议路径，前者不被路由到应用层。
+
+**WebSocket 直连 + CXR 仅管生命周期（方案 B）**：
+- CXR 负责：应用安装与启动（已确认可用）
+- WebSocket 负责：Core ↔ 眼镜所有数据通信
+- 协议：标准 JSON，与 Dashboard / Mock Device 同一套
+- 眼镜端：OkHttp WS 客户端连接 `ws://<PC-IP>:8080/ws/{sessionID}?device_type=ar_glasses`
 
 ## 设备通知策略
 
