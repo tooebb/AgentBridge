@@ -32,6 +32,9 @@ var deployCmdPattern = regexp.MustCompile(
 var migrationPattern = regexp.MustCompile(
 	`(migrate|prisma\s+migrate|alembic|flyway|sequelize\s+db:migrate)`)
 
+var certDeletionPattern = regexp.MustCompile(`.*\.(key|pem|crt|p12|jks|keystore)`)
+var authChangePattern = regexp.MustCompile(`(?i)(api.?key|JWT.?secret|IAM|permission|role|credential)`)
+
 // DefaultRules returns the standard risk ruleset.
 func DefaultRules() []Rule {
 	return []Rule{
@@ -51,8 +54,7 @@ func DefaultRules() []Rule {
 			Score:         0.8,
 			BlockOnMobile: true,
 			Match: func(msg *domain.UnifiedMessage) bool {
-				certPattern := regexp.MustCompile(`.*\.(key|pem|crt|p12|jks|keystore)`)
-				return certPattern.MatchString(msg.Body) && containsDelete(msg)
+				return certDeletionPattern.MatchString(msg.Body) && containsDelete(msg)
 			},
 		},
 		{
@@ -81,8 +83,7 @@ func DefaultRules() []Rule {
 			Score:         0.5,
 			BlockOnMobile: false,
 			Match: func(msg *domain.UnifiedMessage) bool {
-				authPattern := regexp.MustCompile(`(?i)(api.?key|JWT.?secret|IAM|permission|role|credential)`)
-				return authPattern.MatchString(msg.Body)
+				return authChangePattern.MatchString(msg.Body)
 			},
 		},
 		{

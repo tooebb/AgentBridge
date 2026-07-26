@@ -66,8 +66,11 @@ func (e *Engine) ShouldSend(deviceType domain.DeviceType, sessionID, taskID stri
 		return false
 	}
 
-	// Never block terminal events.
-	if msg.EventType == domain.EventTaskCompleted || msg.EventType == domain.EventTaskFailed {
+	// Never block terminal events or user-action-required events.
+	if msg.EventType == domain.EventTaskCompleted ||
+		msg.EventType == domain.EventTaskFailed ||
+		msg.EventType == domain.EventNeedsApproval ||
+		msg.EventType == domain.EventTaskBlocked {
 		return true
 	}
 

@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"agentbridge/internal/domain"
+
+	"github.com/google/uuid"
 )
 
 // Status represents the lifecycle status of an approval.
@@ -123,8 +125,8 @@ func (m *Manager) Resolve(approvalID string, approved bool) (*Approval, error) {
 
 // NeedsRetry checks if the approval should be retried after a failed delivery.
 func (m *Manager) NeedsRetry(approvalID string) (bool, time.Duration) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	a, ok := m.active[approvalID]
 	if !ok || a.Status != StatusPending {
@@ -192,14 +194,5 @@ type AppError struct{ Msg string }
 func (e *AppError) Error() string { return e.Msg }
 
 func generateID() string {
-	return time.Now().Format("20060102150405") + "-" + randomHex(8)
-}
-
-func randomHex(n int) string {
-	const hex = "0123456789abcdef"
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = hex[time.Now().UnixNano()%int64(len(hex))]
-	}
-	return string(b)
+	return uuid.New().String()
 }
