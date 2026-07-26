@@ -97,7 +97,7 @@ async function sendEvent(event) {
 
 // ── Single device client ──────────────────────────────────────────────
 function connectDevice(sessionId, deviceType, label) {
-  const wsUrl = `${SERVER.replace('http', 'ws')}/ws/${sessionId}?device_type=${deviceType}`;
+  const wsUrl = `${SERVER.replace(/^http/, 'ws')}/ws/${sessionId}?device_type=${deviceType}`;
   log(label, 'cyan', `connecting to ${wsUrl}`);
 
   const ws = new WebSocket(wsUrl);

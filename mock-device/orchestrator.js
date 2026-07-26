@@ -165,7 +165,7 @@ const DEVICE_TYPES = ['phone', 'smartwatch', 'ar_glasses', 'earbuds'];
 const DEVICE_NAMES = { phone: 'Phone', smartwatch: 'Watch', ar_glasses: 'AR Glass', earbuds: 'Earbuds' };
 
 function connectDevice(type, session) {
-  const wsUrl = `${SERVER.replace('http', 'ws')}/ws/${session}?device_type=${type}`;
+  const wsUrl = `${SERVER.replace(/^http/, 'ws')}/ws/${session}?device_type=${type}`;
   const ws = new WebSocket(wsUrl);
   let lastMsg = null;
 

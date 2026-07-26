@@ -1,10 +1,11 @@
 const WebSocket = require('ws');
 
 const SERVER = process.env.SERVER || process.argv[2] || 'http://localhost:8080';
-const WS_URL = SERVER.replace('http', 'ws');
+const WS_URL = SERVER.replace(/^http/, 'ws');
 const SESSION = 'roundtrip-' + Date.now();
 const TASK = 'task-rt';
 const DEVICE = 'phone';
+const RECEIVE_TIMEOUT_MS = 5000;
 
 let passed = 0;
 let failed = 0;
@@ -41,6 +42,24 @@ function postEvent(body) {
   });
 }
 
+function waitForMessage(ws, predicate, timeoutMs) {
+  const deadline = timeoutMs || RECEIVE_TIMEOUT_MS;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('waitForMessage timed out after ' + deadline + 'ms')), deadline);
+    function handler(data) {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (predicate(msg)) {
+          clearTimeout(timer);
+          ws.removeListener('message', handler);
+          resolve(msg);
+        }
+      } catch (_) { /* ignore parse errors */ }
+    }
+    ws.on('message', handler);
+  });
+}
+
 async function run() {
   console.log('\n  AgentBridge Mock Device — Roundtrip Test\n');
   console.log(`  Session: ${SESSION}`);
@@ -54,27 +73,23 @@ async function run() {
   });
   check('device WS connected', true);
 
-  // 2. Send needs_approval event, verify device receives it
-  let deviceReceived = null;
-  ws.on('message', (data) => {
-    deviceReceived = JSON.parse(data.toString());
-  });
-
-  const resp1 = await postEvent({
+  // 2. Send task_started, verify device receives it
+  const startedPromise = waitForMessage(ws, msg => msg?.event?.event_type === 'task_started');
+  await postEvent({
     id: 'evt-1', task_id: TASK, session_id: SESSION,
     event_type: 'task_started', title: 'Task Started', body: 'Starting work',
     severity: 'info', risk_score: 0, risk_blocked: false, available_actions: [],
     timestamp: new Date().toISOString(), agent_id: 'test'
   });
-  await new Promise(r => setTimeout(r, 500));
-  check('received task_started', deviceReceived?.event?.event_type === 'task_started');
-  check('device_overrides present', deviceReceived?.device_overrides?.phone != null);
-  check('phone render_hint', deviceReceived?.device_overrides?.phone?.render_hint != null,
-    `hint=${deviceReceived?.device_overrides?.phone?.render_hint}`);
+  const startedMsg = await startedPromise;
+  check('received task_started', startedMsg?.event?.event_type === 'task_started');
+  check('device_overrides present', startedMsg?.device_overrides?.phone != null);
+  check('phone render_hint', startedMsg?.device_overrides?.phone?.render_hint != null,
+    `hint=${startedMsg?.device_overrides?.phone?.render_hint}`);
 
   // 3. Send needs_approval, verify phone gets quick_actions
-  deviceReceived = null;
-  const resp2 = await postEvent({
+  const approvalPromise = waitForMessage(ws, msg => msg?.event?.event_type === 'needs_approval');
+  await postEvent({
     id: 'evt-2', task_id: TASK, session_id: SESSION,
     event_type: 'needs_approval', title: 'Approve DB Migration', body: 'Run prisma migrate deploy',
     severity: 'warning', risk_score: 0.7, risk_blocked: false,
@@ -85,33 +100,31 @@ async function run() {
     ],
     timestamp: new Date().toISOString(), agent_id: 'claude-code'
   });
-  await new Promise(r => setTimeout(r, 500));
-  check('received needs_approval', deviceReceived?.event?.event_type === 'needs_approval');
-  check('risk assessed server-side', deviceReceived?.event?.risk_blocked === true,
-    `risk_blocked=${deviceReceived?.event?.risk_blocked} risk_score=${deviceReceived?.event?.risk_score}`);
-  check('phone has quick_actions', deviceReceived?.device_overrides?.phone?.quick_actions?.length > 0,
-    `actions=${deviceReceived?.device_overrides?.phone?.quick_actions}`);
+  const approvalMsg = await approvalPromise;
+  check('received needs_approval', approvalMsg?.event?.event_type === 'needs_approval');
+  check('risk assessed server-side', approvalMsg?.event?.risk_blocked === true,
+    `risk_blocked=${approvalMsg?.event?.risk_blocked} risk_score=${approvalMsg?.event?.risk_score}`);
+  check('phone has quick_actions', approvalMsg?.device_overrides?.phone?.quick_actions?.length > 0,
+    `actions=${approvalMsg?.device_overrides?.phone?.quick_actions}`);
 
   // 4. Send approval from device back to Core
-  const approvalReply = {
+  ws.send(JSON.stringify({
     direction: 'client_to_server',
     session_id: SESSION,
     task_id: TASK,
     action: { type: 'approve', device_type: DEVICE, timestamp: Date.now() }
-  };
-  ws.send(JSON.stringify(approvalReply));
+  }));
 
   // 5. Send task_completed
-  deviceReceived = null;
-  await new Promise(r => setTimeout(r, 300));
-  const resp3 = await postEvent({
+  const completedPromise = waitForMessage(ws, msg => msg?.event?.event_type === 'task_completed');
+  await postEvent({
     id: 'evt-3', task_id: TASK, session_id: SESSION,
     event_type: 'task_completed', title: 'Task Done', body: 'Migration applied',
     severity: 'info', risk_score: 0, risk_blocked: false, available_actions: [],
     timestamp: new Date().toISOString(), agent_id: 'claude-code'
   });
-  await new Promise(r => setTimeout(r, 500));
-  check('received task_completed', deviceReceived?.event?.event_type === 'task_completed');
+  const completedMsg = await completedPromise;
+  check('received task_completed', completedMsg?.event?.event_type === 'task_completed');
 
   // Summary
   console.log(`\n  Results: ${passed} passed, ${failed} failed\n`);

@@ -56,7 +56,7 @@ async function main() {
 
   // ── Step 1: Connect ──────────────────────────────────────────
   console.log(p('cyan', '  [1/6] Connecting to Core...'));
-  const ws = new WebSocket(`${SERVER.replace('http','ws')}/ws/${SESSION}?device_type=${DEVICE}`);
+  const ws = new WebSocket(`${SERVER.replace(/^http/, 'ws')}/ws/${SESSION}?device_type=${DEVICE}`);
   await new Promise((resolve, reject) => {
     ws.on('open', resolve);
     ws.on('error', reject);
