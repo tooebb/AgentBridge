@@ -9,30 +9,30 @@ import (
 type EventType string
 
 const (
-	EventTaskStarted      EventType = "task_started"
-	EventTaskRunning      EventType = "task_running"
-	EventTaskBlocked      EventType = "task_blocked"
-	EventNeedsApproval    EventType = "needs_approval"
-	EventTaskFailed       EventType = "task_failed"
-	EventTaskCompleted    EventType = "task_completed"
-	EventHeartbeat        EventType = "heartbeat"
-	EventUserAction       EventType = "user_action"
+	EventTaskStarted   EventType = "task_started"
+	EventTaskRunning   EventType = "task_running"
+	EventTaskBlocked   EventType = "task_blocked"
+	EventNeedsApproval EventType = "needs_approval"
+	EventTaskFailed    EventType = "task_failed"
+	EventTaskCompleted EventType = "task_completed"
+	EventHeartbeat     EventType = "heartbeat"
+	EventUserAction    EventType = "user_action"
 )
 
 // TaskState represents the lifecycle state of a task.
 type TaskState string
 
 const (
-	TaskStateIdle              TaskState = "idle"
-	TaskStateStarting          TaskState = "starting"
-	TaskStateRunning           TaskState = "running"
-	TaskStateBlocked           TaskState = "blocked"
-	TaskStateAwaitingApproval  TaskState = "awaiting_approval"
-	TaskStateFailed            TaskState = "failed"
-	TaskStateCompleted         TaskState = "completed"
-	TaskStatePaused            TaskState = "paused"
-	TaskStateFailedTimeout     TaskState = "failed_timeout"
-	TaskStateExpired           TaskState = "expired"
+	TaskStateIdle             TaskState = "idle"
+	TaskStateStarting         TaskState = "starting"
+	TaskStateRunning          TaskState = "running"
+	TaskStateBlocked          TaskState = "blocked"
+	TaskStateAwaitingApproval TaskState = "awaiting_approval"
+	TaskStateFailed           TaskState = "failed"
+	TaskStateCompleted        TaskState = "completed"
+	TaskStatePaused           TaskState = "paused"
+	TaskStateFailedTimeout    TaskState = "failed_timeout"
+	TaskStateExpired          TaskState = "expired"
 )
 
 // Severity indicates the urgency level of an event.
@@ -48,10 +48,10 @@ const (
 type DeviceType string
 
 const (
-	DevicePhone    DeviceType = "phone"
-	DeviceWatch    DeviceType = "smartwatch"
-	DeviceGlass    DeviceType = "ar_glasses"
-	DeviceEarbuds  DeviceType = "earbuds"
+	DevicePhone   DeviceType = "phone"
+	DeviceWatch   DeviceType = "smartwatch"
+	DeviceGlass   DeviceType = "ar_glasses"
+	DeviceEarbuds DeviceType = "earbuds"
 )
 
 // ActionType enumerates user actions that can be performed on a device.
@@ -99,12 +99,12 @@ type UnifiedMessage struct {
 
 // DeviceMessage is the final per-device output ready for delivery.
 type DeviceMessage struct {
-	Direction   string                       `json:"direction"`
-	MessageID   string                       `json:"message_id"`
-	SessionID   string                       `json:"session_id"`
-	Timestamp   int64                        `json:"timestamp"`
-	Event       *UnifiedMessage              `json:"event"`
-	Overrides   map[DeviceType]*DeviceOutput `json:"device_overrides"`
+	Direction string                       `json:"direction"`
+	MessageID string                       `json:"message_id"`
+	SessionID string                       `json:"session_id"`
+	Timestamp int64                        `json:"timestamp"`
+	Event     *UnifiedMessage              `json:"event"`
+	Overrides map[DeviceType]*DeviceOutput `json:"device_overrides"`
 }
 
 // DeviceOutput is the device-specific rendering of an event.
@@ -134,13 +134,13 @@ type ClientAction struct {
 
 // Session holds the runtime state of one agent session.
 type Session struct {
-	ID          string    `json:"id"`
-	UserID      string    `json:"user_id"`
-	AgentType   string    `json:"agent_type"`
-	CurrentState TaskState `json:"current_state"`
-	Devices     map[DeviceType]*DeviceConn `json:"devices"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           string                     `json:"id"`
+	UserID       string                     `json:"user_id"`
+	AgentType    string                     `json:"agent_type"`
+	CurrentState TaskState                  `json:"current_state"`
+	Devices      map[DeviceType]*DeviceConn `json:"devices"`
+	CreatedAt    time.Time                  `json:"created_at"`
+	UpdatedAt    time.Time                  `json:"updated_at"`
 }
 
 // DeviceConn tracks a connected device within a session.

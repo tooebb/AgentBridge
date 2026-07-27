@@ -151,9 +151,9 @@ func (s *Server) handleAgentEvent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{
-		"message_id":  deviceMsg.MessageID,
-		"task_state":  newState,
-		"risk_score":  riskScore,
+		"message_id":   deviceMsg.MessageID,
+		"task_state":   newState,
+		"risk_score":   riskScore,
 		"risk_blocked": riskBlocked,
 	})
 }
@@ -229,7 +229,7 @@ func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	type sessionInfo struct {
 		ID            string   `json:"id"`
 		Devices       []string `json:"devices"`
-		Created        int64    `json:"created"`
+		Created       int64    `json:"created"`
 		EventCount    int      `json:"event_count"`
 		LastEventType string   `json:"last_event_type,omitempty"`
 	}
@@ -282,4 +282,3 @@ func (s *Server) handleSessionEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(events)
 }
-

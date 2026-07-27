@@ -18,11 +18,11 @@ const (
 
 // Policy defines notification behavior for a device.
 type Policy struct {
-	Mode            Mode
-	AggInterval     time.Duration
-	MinSeverity     domain.Severity
-	AllowActions    bool
-	CoolDown        time.Duration
+	Mode         Mode
+	AggInterval  time.Duration
+	MinSeverity  domain.Severity
+	AllowActions bool
+	CoolDown     time.Duration
 }
 
 // DefaultPolicies returns sensible defaults per device type.

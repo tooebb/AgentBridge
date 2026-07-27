@@ -44,11 +44,11 @@ func HandleDashboardUpgrade(w http.ResponseWriter, r *http.Request, hub *Hub) er
 
 	sendCh := hub.SubscribeDashboard()
 	handler := &ClientHandler{
-		hub:        hub,
-		conn:       conn,
-		sessionID:  "dashboard",
-		deviceType: "dashboard",
-		sendCh:     sendCh,
+		hub:         hub,
+		conn:        conn,
+		sessionID:   "dashboard",
+		deviceType:  "dashboard",
+		sendCh:      sendCh,
 		isDashboard: true,
 	}
 

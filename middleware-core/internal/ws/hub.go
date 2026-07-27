@@ -11,9 +11,9 @@ import (
 
 // Hub manages active WebSocket sessions and routes messages.
 type Hub struct {
-	mu          sync.RWMutex
-	sessions    map[string]*Session
-	dashboards  []chan []byte // subscribers that receive all events
+	mu         sync.RWMutex
+	sessions   map[string]*Session
+	dashboards []chan []byte // subscribers that receive all events
 }
 
 // Session groups the connections for one agent session.

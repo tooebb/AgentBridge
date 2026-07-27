@@ -44,9 +44,9 @@ type Attempt struct {
 
 // Manager handles approval lifecycle: creation, timeout, retry, resolution.
 type Manager struct {
-	mu       sync.RWMutex
-	active   map[string]*Approval // approvalID -> Approval
-	byTask   map[string]string    // taskID -> approvalID
+	mu     sync.RWMutex
+	active map[string]*Approval // approvalID -> Approval
+	byTask map[string]string    // taskID -> approvalID
 }
 
 // NewManager creates a new Manager.
