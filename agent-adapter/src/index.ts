@@ -8,6 +8,7 @@
  */
 
 import { ClaudeCodeAdapter } from './adapters/claude';
+import { GenericCLIAdapter } from './adapters/generic-cli';
 import { AgentHub } from './hub';
 import { AgentBridgeClient } from './ws-client';
 import { EventNormalizer } from './normalizer';
@@ -27,6 +28,7 @@ const wsClient = new AgentBridgeClient({
 });
 
 const hub = new AgentHub();
+hub.register(new GenericCLIAdapter({ sessionId: SESSION_ID }));
 hub.register(new ClaudeCodeAdapter({ claudePath: CLAUDE_PATH, sessionId: SESSION_ID }));
 
 let normalizer = new EventNormalizer(SESSION_ID);
@@ -85,6 +87,9 @@ console.log(`  Server: ${SERVER_URL}`);
 console.log(`  Session: ${SESSION_ID}`);
 console.log(`  Preferred agent: ${PREFERRED_AGENT || 'auto'}`);
 console.log(`  Claude CLI: ${CLAUDE_PATH}`);
+if (process.env.AGENTBRIDGE_AGENT_CMD) {
+  console.log(`  Generic CLI: ${process.env.AGENTBRIDGE_AGENT_CMD}`);
+}
 
 async function main(): Promise<void> {
   const adapter = await hub.select(PREFERRED_AGENT);

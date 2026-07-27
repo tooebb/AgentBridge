@@ -1,4 +1,5 @@
 import { ClaudeAPIAdapter } from './adapters/claude-api';
+import { OpenAICompatibleAdapter } from './adapters/openai-compatible';
 import type { AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './adapters/types';
 
 export class AgentHub {
@@ -7,6 +8,7 @@ export class AgentHub {
 
   constructor() {
     this.register(new ClaudeAPIAdapter());
+    this.register(new OpenAICompatibleAdapter());
   }
 
   register(adapter: AgentAdapter): void {
@@ -14,7 +16,9 @@ export class AgentHub {
   }
 
   async select(preferred?: string): Promise<AgentAdapter> {
-    const order = preferred ? [preferred] : ['claude-api', 'claude-cli'];
+    const order = preferred
+      ? [preferred]
+      : ['claude-api', 'openai-compatible', 'generic-cli', 'claude-cli'];
 
     for (const name of order) {
       const adapter = this.adapters.get(name);

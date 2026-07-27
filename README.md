@@ -133,6 +133,28 @@ npx tsx src/index.ts
 # Dashboard 可实时看到事件流
 ```
 
+Agent Adapter 默认按 `claude-api` → `openai-compatible` → `generic-cli` → `claude-cli` 顺序选择可用适配器，也可以通过 `AGENTBRIDGE_AGENT` 指定：
+
+```bash
+# Claude API
+ANTHROPIC_API_KEY=... AGENTBRIDGE_AGENT=claude-api npm run dev
+
+# Claude Code / ccswitch / 其他兼容 CLI 包装器
+AGENTBRIDGE_AGENT=generic-cli \
+AGENTBRIDGE_AGENT_CMD=ccswitch \
+AGENTBRIDGE_AGENT_ARGS='["--print","--output-format","stream-json","{prompt}"]' \
+npm run dev
+
+# OpenAI-compatible endpoint，例如 DeepSeek / OpenRouter / 本地兼容服务
+AGENTBRIDGE_AGENT=openai-compatible \
+OPENAI_COMPATIBLE_BASE_URL=https://api.example.com/v1 \
+OPENAI_COMPATIBLE_API_KEY=... \
+OPENAI_COMPATIBLE_MODEL=deepseek-v4-pro \
+npm run dev
+```
+
+`generic-cli` 支持 `AGENTBRIDGE_AGENT_ENV` 传入 JSON 环境变量；`AGENTBRIDGE_AGENT_ARGS` 支持 JSON 字符串数组，参数内的 `{prompt}` 会被替换为初始任务提示。第一阶段 OpenAI-compatible 只实现最小文本调用和设备动作续写，复杂 tool calling / 流式输出 / 供应商差异适配后续单独扩展。
+
 ### 验证
 
 ```bash
