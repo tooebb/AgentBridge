@@ -227,6 +227,15 @@ SERVER=http://127.0.0.1:8080 npm run test:w3
 
 该脚本模拟 `ar_glasses` 客户端，验证眼镜端审批消息、TTS/屏显 overrides、按键/语音 approve 回传、`agent_adapter` relay、以及断连重连后的 `last_acked_seq` 补发。完整实机验收清单见 `docs/w3-integration-checklist.md`。
 
+进入真实 W3/手机联调前，可先跑主机预检：
+
+```bash
+cd mock-device
+SERVER=http://127.0.0.1:8080 npm run w3:preflight
+```
+
+预检会串联 Node/依赖/Core health/模拟 W3 readiness，并检查当前主机是否能通过 `adb devices` 看到设备。仓库自测模式下没有 `adb` 或没有设备只会提示 WARN；现场联调时使用 `W3_REQUIRE_DEVICE=1`，看不到 `state=device` 的 W3/手机设备会直接失败。
+
 ## 事件类型 & 状态机
 
 ### 6 种事件类型

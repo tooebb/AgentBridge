@@ -194,10 +194,10 @@ async function run() {
   reconnected.close();
 
   console.log(`\n  Results: ${passed} passed, ${failed} failed\n`);
-  process.exitCode = failed > 0 ? 1 : 0;
+  process.exit(failed > 0 ? 1 : 0);
 }
 
 run().catch((err) => {
   console.error('Readiness check error:', err.message);
-  process.exitCode = 1;
+  process.exit(1);
 });

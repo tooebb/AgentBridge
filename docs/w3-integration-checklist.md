@@ -26,6 +26,21 @@ SERVER=http://127.0.0.1:8080 npm run test:w3
 - approve 动作携带 `last_acked_seq`、`device_type=ar_glasses`、语音文本并 relay 到 `agent_adapter`。
 - 断连重连后按照 `last_acked_seq` 补发后续消息。
 
+如果准备进入真实 W3/手机联调，先执行主机预检：
+
+```bash
+cd mock-device
+SERVER=http://127.0.0.1:8080 npm run w3:preflight
+```
+
+该预检会检查 Node.js、mock-device 依赖、Core `/health`、模拟 W3 readiness，以及当前主机是否能通过 `adb devices` 看到设备。默认仓库自测模式下，未安装 `adb` 或未连接设备只会给出 WARN；现场真实联调时使用：
+
+```bash
+W3_REQUIRE_DEVICE=1 SERVER=http://127.0.0.1:8080 npm run w3:preflight
+```
+
+此时如果主机看不到 `state=device` 的 W3/手机设备，预检会失败并提示需要现场接入设备。
+
 ## 3. W3 端协议要求
 
 - 首次连接携带 `device_type=ar_glasses`。
@@ -84,8 +99,18 @@ cd mock-device
 SERVER=http://127.0.0.1:8080 npm run glass
 ```
 
+真实设备联调需要现场补充以下输出，便于继续定位：
+
+```bash
+adb devices
+adb logcat -d -t 300
+```
+
+同时保留 Core 控制台日志和 W3/手机 App 日志；如果设备未接入当前可执行命令的主机，本仓库只能完成模拟验证，无法直接判断 SDK、蓝牙、系统 TTS 或按键事件是否正常。
+
 ## 6. 当前边界
 
 - 本仓库提供 W3 接入协议、模拟验证和联调清单；真实 W3 App 的 SDK 接入、蓝牙链路、系统级 TTS/按键事件绑定仍需要在客户端工程内完成。
+- `npm run w3:preflight` 能确认当前主机是否具备进入实机联调的条件，但不能替代 W3 SDK/App 真实运行验证。
 - OpenAI-compatible provider 目前是最小文本调用骨架，不覆盖所有模型的 tool calling 和流式差异。
 - 实机验收前应先跑 `npm run test:w3`、`npm run test:e2e`、`middleware-core go test ./...`。
