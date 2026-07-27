@@ -2,7 +2,7 @@
 
 > **项目代号**：AgentBridge
 > **MVP 目标**：4-6 周
-> **首个硬件终端**：Rokid Glass 3（AR 眼镜）
+> **首个硬件终端**：Rokid RG-glasses（AR 眼镜），CXR-L/CXR-S SDK
 > **参考对比**：GPT 提供的架构骨架（6 层模型）→ 融合优化为当前方案
 > **当前文档状态**：2026-07-27 已按仓库实现同步；生产化规划与真实 Phone/Glass 客户端实现明确标注为后续工作。
 
@@ -91,9 +91,9 @@ PC Agent stdout
   → Risk Assessor 计算风险分 + 移动端拦截判断
   → Device Dispatcher 生成各端 device_overrides
   → Notification Engine（决定推送策略：即时/聚合/静默）
-  → WebSocket → Phone
-  → BT CustomMessage → Glass → TTS + 通知卡片
-    用户按键(approve) → Glass → BT → Phone → WebSocket
+  → WebSocket → Phone（卡片通知）
+  → WebSocket → Glass（直连 Core，TTS + 卡片 + 按键审批）
+    用户按键(approve) → Glass → WebSocket → Core
   → Core → Approval Manager（记录审批结果）→ ActionRouter
   → AgentAdapter → stdin → Agent 继续执行
 ```
@@ -117,8 +117,8 @@ PC Agent stdout
 |------|------|---------|------|------|
 | Middleware Core | **Golang** | gorilla/websocket + chi router | WSS, HTTPS REST | 内存 EventStore；可选 SQLite |
 | Agent Adapter | **Node.js/TS** | Anthropic SDK, child_process, ws | REST/WS, stdio | 无（无状态） |
-| Phone（改造已有） | **Kotlin** | OkHttp, PSecuritySDK | WSS, BT, P2P | SQLite（离线队列） |
-| Glass（改造已有） | **Kotlin** | GlassSdk | BT | SharedPreferences |
+| Phone（改造已有） | **Kotlin** | OkHttp, CXR-L SDK (client-l:1.0.4) | WSS, BT, P2P | SQLite（离线队列） |
+| Glass（改造已有） | **Kotlin** | OkHttp, CXR-S SDK (cxr-service-bridge) | WSS | SharedPreferences |
 | Web Dashboard | **React/TS** | React 18 + Vite | WSS, REST | 无 |
 
 ### 选型理由
@@ -403,44 +403,73 @@ type NotificationPolicy struct {
 
 ### 12.1 思路
 
-不重写眼镜端，在已有 Demo 基础上最小化改动：
+不重写眼镜端和手机端，在已有 CXR-L/CXR-S Demo 工程基础上最小化改动：
 
 ```
-Middleware Core ← WSS → Phone App（加 AgentBridgeService）
-                            ↕ BT + P2P（已有 Rokid SDK）
-                        Glass App（加 AgentActionHandler）
+Middleware Core ← WSS → Glass App（眼镜直连 Core，OkHttp WS 客户端）
+Middleware Core ← WSS → Phone App（手机直连 Core，卡片通知）
+Phone ← CXR-L SDK → Glass（仅生命周期：appUploadAndInstall + appStart）
 ```
 
-### 12.2 Phone App 改动（glass3sdkphonedemo）
+**关键决策**：CXR `sendCustomCmd`（手机→眼镜）已确认无法稳定进入 CustomApp 订阅回调（闭源 SDK 协议路由问题），数据面放弃 CXR Caps，改走标准 WebSocket。眼镜 App 通过手机网络直接连接 Core 的 WebSocket 端点。CXR SDK 仅保留 `appUploadAndInstall` / `appStart` 等生命周期管理能力。
+
+### 12.2 眼镜端改动（cxrswithcxrl，package: com.rokid.cxrswithcxrl）
+
+基于 `cxrssample/cxrswithcxrl` 工程，使用 CXR-S SDK (`cxr-service-bridge`)。
 
 | 文件 | 操作 | 内容 |
 |------|------|------|
-| `agent/AgentBridgeService.kt` | **新建** | WebSocket 客户端 + BT 消息转发 + Action 回传 |
-| `data/ProjectBusinessType.kt` | 修改 | 新增 `AGENT_TTS`, `AGENT_ACTION`, `AGENT_NOTIFICATION` |
-| `DeviceLinkerManager.kt` | 修改 | messageListener 扩展，解析 `AGENT_ACTION` 类型 |
-| `AndroidManifest.xml` | 修改 | 注册 AgentBridgeService（前台服务） |
+| `agent/AgentBridgeProtocol.kt` | **新建** | 协议数据类（DeviceMessage/ClientMessage 等，Gson @SerializedName 对齐 Core JSON） |
+| `agent/AgentBridgeClient.kt` | **新建** | OkHttp WS 客户端 + seq 去重 + ack 持久化 + 指数退避重连 |
+| `agent/AgentActionHandler.kt` | **新建** | 卡片状态管理 + Android TTS 播报 + 按键动作路由 |
+| `agent/CardRenderer.kt` | **新建** | Jetpack Compose 卡片 UI（status/actionable/alert/card 四种主题） |
+| `activities/main/MainViewModel.kt` | 修改 | 集成 AgentBridgeClient + AgentActionHandler，KeyEventListener 映射 Agent 操作 |
+| `activities/main/MainActivity.kt` | 修改 | 集成 AgentCard UI，生命周期管理（连接/断开/释放） |
+| `receiver/KeyReceiver.kt` | 无需修改 | 已有系统广播支持 CLICK / DOUBLE_CLICK / LONG_PRESS |
+| `AndroidManifest.xml` | 修改 | 新增 INTERNET 权限 |
 
-### 12.3 Glass App 改动（glassdemo）
+**按键映射**（基于已有 KeyReceiver 系统广播）：
+- CLICK → QuickActions[0]（approve / continue）
+- DOUBLE_CLICK → QuickActions[1]（reject / pause）
+- LONG_PRESS → view_details
+
+### 12.3 手机端改动（CXRLSample，package: com.rokid.renewcxrlsample）
+
+基于 `CXRLSample` 工程，使用 CXR-L SDK (`client-l:1.0.4`)。改动最小化：CXR 生命周期（安装+启动眼镜 App）已有完整实现，手机端仅需新增 Core 地址配置常量，后续可扩展设备发现 UI。
 
 | 文件 | 操作 | 内容 |
 |------|------|------|
-| `agent/AgentActionHandler.kt` | **新建** | TTS 播放 + 通知展示 + 按键映射 + 语音命令 |
-| `GlassesButtonReceiver.kt` | 修改 | 单击 → agent approve，双击 → agent reject |
-| `MessageReceiveActivity.kt` | 修改 | 解析 `AGENT_TTS` / `AGENT_NOTIFICATION` 消息类型 |
-| `SendMessageActivity.kt` | 修改 | 注册离线语音命令 "approve" / "reject" |
+| `app/CONSTANT.kt` | 修改 | 新增 `DEFAULT_CORE_SERVER_URL` / `DEFAULT_CORE_SESSION_ID` |
+| `activities/session/SessionHubScreen.kt` | 可选修改 | Core 地址输入框（开发阶段可跳过，眼镜端硬编码地址） |
+
+### 12.4 CXR-L SDK 已验证能力
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| CustomView | ✅ | 手机 JSON 布局 → 眼镜渲染 |
+| CustomApp 安装 | ✅ | `appUploadAndInstall` 成功（WiFi 必须空闲） |
+| CustomApp 启动 | ✅ | `appStart` → `onOpenAppResult: true` |
+| 眼镜→手机 sendMessage | ✅ | 按键事件回传，走 Notify 协议 |
+| 手机→眼镜 sendCustomCmd | ❌ 放弃 | `cxrservice` 路由为 ShortMessage，不转发到 CustomApp 订阅回调 |
+
+### 12.5 开发阶段连接配置
+
+开发阶段眼镜端硬编码 Core 地址（`ws://<PC-LAN-IP>:8080`），后续可改为：
+- ADB 传参：`adb shell am start -e server "ws://..." -e session "demo-123"`
+- 配置文件：SharedPreferences 通过 ADB 预置
+- 设备发现：从 Core REST API 拉取活跃 session 列表
 
 ---
 
-## 13. 开发路线图（6 周）
+## 13. 开发路线图
 
-| 周 | 目标 | 关键产出 |
-|----|------|---------|
-| **W1** | 基础 & Agent 接入 | Core 骨架 + Claude Code Adapter + Event Normalizer + Context Engine + 状态机 |
-| **W2** | 设备适配 & 手机集成 | Device Adapter + Notification Engine + Phone App AgentBridgeService |
-| **W3** | Glass 端到端闭环 | Glass App 改造 + 按键/语音反馈 + 完整审批闭环测试 |
-| **W4** | 风控 & 审批 & 容错 | Risk Assessor + Approval Manager + 离线重连 + 移动端拦截 |
-| **W5** | Dashboard & 打磨 | React 监控面板 + 性能优化 + 边缘场景覆盖 |
-| **W6** | MVP 交付 | 文档 + Demo 环境 + 演示数据 |
+实际开发按三层递进：
+
+| 阶段 | 目标 | 状态 |
+|------|------|------|
+| **Phase 1** (PC only) | Core + Agent Adapter + Dashboard + Mock Device + SQLite/W3 协议 | ✅ 已完成 (2026-07-26) |
+| **Phase 2** (WiFi 联调) | 眼镜端 WebSocket 客户端 + 卡片渲染 + TTS + 按键审批 + 真机验收 | 🔄 开发中 (2026-07-27) |
+| **Phase 3** (三端集成) | 手机/手表/耳机完整客户端 + 生产化安全/存储 + 跨实例部署 | 📋 规划中 |
 
 ---
 
@@ -519,5 +548,6 @@ agentbridge/
 | EventStore 可靠性 | 已实现 | 内存 ring buffer + 可选 SQLite，支持 `seq`、`last_acked_seq`、replay |
 | Agent provider | 已实现 | `claude-api`、`openai-compatible`、`generic-cli`、`claude-cli` |
 | Mock Device / W3 readiness | 已实现 | 状态层、e2e replay/action、W3 readiness 和 preflight |
-| 真实 Phone/Glass App | 待实现 | 本仓库只有协议、模拟器和联调清单；客户端工程需补 OkHttp WS、TTS、按键/语音绑定 |
+| 眼镜端客户端 (cxrswithcxrl) | 开发中 | AgentBridgeProtocol + AgentBridgeClient + CardRenderer + AgentActionHandler，详见 Phase 2 计划 |
+| 手机端客户端 (CXRLSample) | 最小化 | CXR 生命周期已可用；Core 地址配置预留，详见 Phase 2 计划 |
 | 生产化安全/存储 | 待实现 | API key/JWT、设备授权、PostgreSQL/Redis、审批审计持久化 |

@@ -27,7 +27,7 @@ Claude Code、Codex 等 AI Agent 极大加速了开发效率，但带来了一�
 - **风险评估 + 移动端拦截**：累计评分模型（7 条规则，0-1.0 分），高风险操作（如 `rm -rf`、证书删除、数据库迁移）直接拦截移动端审批通道，强制用户返回 PC 确认，兼顾便捷与安全。
 - **情境感知通知策略**：即时/聚合/静默三种模式，per-device 可配置。Glass 默认冷却 10 秒防打扰，Watch 默认 60 秒聚合。未来可结合头姿/佩戴状态推断用户场景自动切换。
 
-**首个硬件终端：Rokid Glass 3（AR 眼镜）**——AR 眼镜是最自然的"移动办公"载体：抬头即见，语音+按键交互，不打断行走。AgentBridge 首个适配的眼镜端已预留完整交互路径（TTS 播报 + 通知卡片 + 按键/语音审批）。
+**首个硬件终端：Rokid RG-glasses（AR 眼镜，CXR-L/CXR-S SDK）**——AR 眼镜是最自然的"移动办公"载体：抬头即见，语音+按键交互，不打断行走。AgentBridge 首个适配的眼镜端已预留完整交互路径（TTS 播报 + 通知卡片 + 按键/语音审批），眼镜直连 Core WebSocket，手机通过 CXR-L SDK 管理眼镜生命周期。
 
 ## 架构
 
@@ -52,9 +52,11 @@ AI Agent (Claude Code)
     ┌────┼────┬─────┐
     ▼    ▼    ▼     ▼
   Phone Watch Glass Earbuds
-    │              (BT·Rokid SDK)
-    ▼
-  AR Glass ←── 用户按键/语音审批
+              │ (WSS 直连 Core)
+              ▼
+         AR Glass ←── 用户按键/语音审批
+              │
+         Phone (CXR-L 仅管理生命周期: install + start)
 ```
 
 ## 技术栈
@@ -64,8 +66,8 @@ AI Agent (Claude Code)
 | **Middleware Core** | Go 1.21+ | gorilla/websocket, chi | WSS, REST |
 | **Agent Adapter** | TypeScript (Node) | child_process, ws | Stdio pipe, WSS |
 | **Web Dashboard** | React 18 + TypeScript | Vite | WSS, REST |
-| **Phone App** (planned) | Kotlin | OkHttp, Rokid SDK | WSS, BT |
-| **Glass App** (planned) | Kotlin | GlassSdk | BT |
+| **Phone App** (planned) | Kotlin | CXR-L SDK (client-l:1.0.4) | WSS |
+| **Glass App** (planned) | Kotlin | CXR-S SDK + OkHttp WS | WSS |
 
 ## 项目结构
 

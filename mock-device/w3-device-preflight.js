@@ -62,6 +62,7 @@ function runCommand(command, args, options = {}) {
     env: { ...process.env, ...options.env },
     encoding: 'utf8',
     timeout: options.timeout || TIMEOUT_MS,
+    shell: process.platform === 'win32',
   });
 }
 
