@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -284,8 +283,3 @@ func (s *Server) handleSessionEvents(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(events)
 }
 
-func init() {
-	// Ensure UUID generation works.
-	_ = uuid.New()
-	_ = fmt.Sprintf
-}

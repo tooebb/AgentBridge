@@ -55,15 +55,134 @@ func (d *Dispatcher) forWatch(msg *domain.UnifiedMessage) *domain.DeviceOutput {
 }
 
 func (d *Dispatcher) forGlass(msg *domain.UnifiedMessage) *domain.DeviceOutput {
-	tts := ttsForGlass(msg)
+	switch msg.EventType {
+	case domain.EventTaskStarted:
+		return d.glassTaskStarted(msg)
+	case domain.EventTaskRunning:
+		return d.glassTaskRunning(msg)
+	case domain.EventTaskBlocked:
+		return d.glassTaskBlocked(msg)
+	case domain.EventNeedsApproval:
+		return d.glassNeedsApproval(msg)
+	case domain.EventTaskFailed:
+		return d.glassTaskFailed(msg)
+	case domain.EventTaskCompleted:
+		return d.glassTaskCompleted(msg)
+	default:
+		return d.glassDefault(msg)
+	}
+}
+
+func (d *Dispatcher) glassTaskStarted(msg *domain.UnifiedMessage) *domain.DeviceOutput {
+	return &domain.DeviceOutput{
+		TTSText:      "",
+		CardTitle:    "◤ " + truncate(msg.Title, 50),
+		CardBody:     glassSummary(msg.Body, 150),
+		QuickActions: nil,
+		RenderHint:   "status_card",
+	}
+}
+
+func (d *Dispatcher) glassTaskRunning(msg *domain.UnifiedMessage) *domain.DeviceOutput {
+	return &domain.DeviceOutput{
+		TTSText:      "",
+		CardTitle:    "◉ " + truncate(msg.Title, 50),
+		CardBody:     glassSummary(msg.Body, 150),
+		QuickActions: nil,
+		RenderHint:   "status_card",
+	}
+}
+
+func (d *Dispatcher) glassTaskBlocked(msg *domain.UnifiedMessage) *domain.DeviceOutput {
+	actions := watchActions(msg.AvailableActions, 2)
+	if len(actions) == 0 {
+		actions = []string{"continue", "view_details"}
+	}
+	return &domain.DeviceOutput{
+		TTSText:      fmt.Sprintf("任务阻塞: %s", msg.Title),
+		CardTitle:    "⚠ 阻塞: " + truncate(msg.Title, 45),
+		CardBody:     glassSummary(msg.Body, 180),
+		QuickActions: actions,
+		RenderHint:   "actionable_card",
+	}
+}
+
+func (d *Dispatcher) glassNeedsApproval(msg *domain.UnifiedMessage) *domain.DeviceOutput {
+	tts := fmt.Sprintf("需要审批: %s", msg.Title)
+	if msg.RiskScore >= 0.7 {
+		tts = fmt.Sprintf("高风险操作: %s", msg.Title)
+	}
+
+	actions := watchActions(msg.AvailableActions, 2)
+	if len(actions) == 0 {
+		actions = []string{"approve", "reject"}
+	}
+
+	riskLine := ""
+	if msg.RiskScore > 0 {
+		riskLine = fmt.Sprintf("风险: %.0f%% | ", msg.RiskScore*100)
+	}
+
+	return &domain.DeviceOutput{
+		TTSText:      tts,
+		CardTitle:    "⛔ 审批: " + truncate(msg.Title, 42),
+		CardBody:     riskLine + glassSummary(msg.Body, 140),
+		QuickActions: actions,
+		RenderHint:   "actionable_card",
+	}
+}
+
+func (d *Dispatcher) glassTaskFailed(msg *domain.UnifiedMessage) *domain.DeviceOutput {
+	return &domain.DeviceOutput{
+		TTSText:      fmt.Sprintf("任务失败: %s", msg.Title),
+		CardTitle:    "✕ 失败: " + truncate(msg.Title, 48),
+		CardBody:     glassSummary(msg.Body, 200),
+		QuickActions: []string{"view_details"},
+		RenderHint:   "alert_card",
+	}
+}
+
+func (d *Dispatcher) glassTaskCompleted(msg *domain.UnifiedMessage) *domain.DeviceOutput {
+	return &domain.DeviceOutput{
+		TTSText:      fmt.Sprintf("完成: %s", msg.Title),
+		CardTitle:    "✓ " + truncate(msg.Title, 52),
+		CardBody:     glassSummary(msg.Body, 120),
+		QuickActions: nil,
+		RenderHint:   "status_card",
+	}
+}
+
+func (d *Dispatcher) glassDefault(msg *domain.UnifiedMessage) *domain.DeviceOutput {
+	tts := ""
+	if msg.Severity == domain.SeverityCritical || msg.Severity == domain.SeverityWarning {
+		tts = severityPrefix(msg.Severity) + msg.Title
+	}
 	actions := watchActions(msg.AvailableActions, 1)
 	return &domain.DeviceOutput{
 		TTSText:      tts,
-		CardTitle:    truncate(msg.Title, 30),
-		CardBody:     truncate(msg.Body, 100),
+		CardTitle:    truncate(msg.Title, 52),
+		CardBody:     truncate(msg.Body, 150),
 		QuickActions: actions,
-		RenderHint:   "toast",
+		RenderHint:   "card",
 	}
+}
+
+// glassSummary extracts a compact summary from the event body,
+// preferring the first non-empty line and trimming to max chars.
+func glassSummary(body string, max int) string {
+	lines := strings.Split(body, "\n")
+	var first string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			first = trimmed
+			break
+		}
+	}
+	if first == "" {
+		first = body
+	}
+	return truncate(first, max)
 }
 
 func (d *Dispatcher) forEarbuds(msg *domain.UnifiedMessage) *domain.DeviceOutput {
@@ -76,11 +195,6 @@ func (d *Dispatcher) forEarbuds(msg *domain.UnifiedMessage) *domain.DeviceOutput
 		TTSText:    tts,
 		RenderHint: "tts",
 	}
-}
-
-func ttsForGlass(msg *domain.UnifiedMessage) string {
-	prefix := severityPrefix(msg.Severity)
-	return fmt.Sprintf("%s%s", prefix, msg.Title)
 }
 
 func severityPrefix(s domain.Severity) string {
