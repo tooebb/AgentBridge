@@ -23,6 +23,91 @@
 
 ---
 
+## 开发前决策与补充口径
+
+### 1. Rokid 工程与当前仓库边界
+
+当前 AgentBridge 仓库只包含 Rokid SDK 文档摘要与联调计划，不包含可直接编译的两个 Rokid 示例工程源码：
+
+- `docs/CXR-L SDK.md`：手机端 CXR-L SDK 文档摘要，覆盖 RenewCXRLSample、CXR-L 鉴权、CustomApp 安装/启动、音频/拍照/自定义指令等。
+- `docs/CXR-S.md`：眼镜端 CXR-S SDK 文档摘要，覆盖 `CXRServiceBridge`、消息订阅/回复、按键广播、眼镜端开发环境等。
+- `cxrswithcxrl` / `CXRLSample` 实际工程需要从 Rokid SDK 示例包或现有客户端仓库取得后再开发。
+
+因此 phase2 代码开发应拆成两个代码落点：
+
+| 落点 | 内容 | 是否在当前 AgentBridge 仓库 |
+| ---- | ---- | --------------------------- |
+| AgentBridge | 协议测试、现场手册、Core/Adapter 侧必要兼容修正 | 是 |
+| `cxrswithcxrl` | 眼镜端 WS 客户端、卡片、TTS、按键动作 | 否 |
+| `CXRLSample` / 手机端工程 | CXR 鉴权、CustomApp 安装/启动、Core 地址配置入口 | 否 |
+
+### 2. 数据面与控制面分工
+
+`sendCustomCmd` 已确认不能作为稳定的手机到眼镜业务数据通道，因此 phase2 采用：
+
+- 数据面：眼镜端 App 使用 OkHttp WebSocket 直连 Core，收事件、渲染卡片、回传 action。
+- 控制面：手机端 CXR-L 仍负责鉴权、连接 Rokid AI App、安装/启动眼镜端 CustomApp。
+- 眼镜端 CXR-S 保留：应用生命周期、按键广播、必要的 SDK 状态监听；不再依赖 CXR Caps 承载 AgentBridge 业务消息。
+
+这意味着“眼镜直连 Core”不等于“不需要手机端工程”。MVP 至少仍需要手机端把眼镜 App 启动起来；只是 AgentBridge 的实时事件流不走手机中转。
+
+### 3. Core 地址策略
+
+开发阶段先使用眼镜端硬编码：
+
+```kotlin
+private const val CORE_SERVER_URL = "ws://<PC-LAN-IP>:8080"
+private const val CORE_SESSION_ID = "default"
+```
+
+约束：
+
+- `<PC-LAN-IP>` 必须是眼镜所在网络可访问的电脑局域网 IP，不能写 `127.0.0.1`。
+- 每次更换网络后，若 IP 变化，需要重新编译/安装眼镜 App，或临时用 ADB/配置文件方案覆盖。
+- `session_id` MVP 固定为 `default`；多会话、设备发现、扫码配对、手机端配置下发放到后续增强，不阻塞 phase2 MVP。
+
+后续可选升级顺序：
+
+1. ADB extra 或本地配置文件注入 Core 地址。
+2. 手机端配置页保存地址，并通过可验证通道传给眼镜端。
+3. mDNS/二维码/服务发现。
+
+### 4. 协议字段对齐表
+
+眼镜端 Kotlin data class 必须对齐 Core 当前 JSON 字段：
+
+| 字段 | 方向 | 要求 |
+| ---- | ---- | ---- |
+| `device_overrides.ar_glasses.card_title` | Core → Glass | 优先显示；缺失时回退 `event.title` |
+| `device_overrides.ar_glasses.card_body` | Core → Glass | 优先显示；缺失时回退 `event.body` |
+| `device_overrides.ar_glasses.render_hint` | Core → Glass | `status_card` / `actionable_card` / `alert_card` / `card` |
+| `device_overrides.ar_glasses.quick_actions` | Core → Glass | 按键映射优先使用；缺失时回退 `event.available_actions[].action_type` |
+| `device_overrides.ar_glasses.tts_text` | Core → Glass | 非空时播报；风险拦截时改为本地高风险提示 |
+| `seq` | Core → Glass | 收到后持久化为 `last_acked_seq`，用于去重与重连补发 |
+| `is_replay` | Core → Glass | 用于日志/调试标记，渲染逻辑不应重复触发危险操作 |
+| `last_acked_seq` | Glass → Core | 建连 query 与 action 消息都要携带 |
+| `action.type` | Glass → Core | 仅允许 `approve` / `reject` / `continue` / `pause` / `view_details` |
+| `action.text` | Glass → Core | 语音输入预留，MVP 可为空 |
+
+### 5. 最小验收矩阵
+
+| 场景 | 通过标准 |
+| ---- | -------- |
+| WS 连接 | Core 日志出现 `device_type=ar_glasses` 连接；眼镜端日志显示 connected |
+| 状态卡片 | `task_started` / `task_running` / `task_completed` 能显示 status card，TTS 可播报 |
+| 审批卡片 | `needs_approval` 能显示 actionable card，单击/双击提示正确 |
+| 单击 approve | 眼镜按键单击后 Core 收到 `action.type=approve`，Agent Adapter 收到用户动作 |
+| 双击 reject | 眼镜按键双击后 Core 收到 `action.type=reject`，Agent Adapter 收到用户动作 |
+| 断线重连 replay | 断网/重启 App 后携带 `last_acked_seq` 重连，只补发未确认消息，重复 seq 不重复渲染 |
+
+### 6. 任务组织建议
+
+phase2 建议新开独立 issue 开发。当前 issue 已包含 phase1 设计、开发、文档修正、push/PR 讨论和 phase2 预研，继续追加客户端开发会让讨论线和上下文过长。
+
+新 issue 不会丢失关键记忆：创建时把本计划文档、当前分支、phase1 边界、Rokid 工程来源和验收矩阵写进描述即可。当前 issue 可保留为 phase1 交付与 phase2 准备记录，新 issue 专注 phase2 执行。
+
+---
+
 ## 文件结构
 
 ```
