@@ -2,6 +2,7 @@ import { ChildProcess, spawn } from 'child_process';
 import { createInterface } from 'readline';
 import { EventEmitter } from 'events';
 import { RawEvent } from '../types';
+import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types';
 
 export interface ClaudeAdapterOptions {
   /** Path to the claude binary. Default: 'claude'. */
@@ -18,7 +19,10 @@ export interface ClaudeAdapterOptions {
  * for structured event parsing when available, falling back to plain-text
  * line-by-line processing.
  */
-export class ClaudeCodeAdapter extends EventEmitter {
+export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
+  readonly name = 'claude-cli';
+  readonly capabilities: AdapterCapability[] = ['file_ops', 'shell_exec', 'code_search', 'conversation'];
+
   private process: ChildProcess | null = null;
   private sessionId: string;
   private claudePath: string;
@@ -28,6 +32,73 @@ export class ClaudeCodeAdapter extends EventEmitter {
     super();
     this.sessionId = options.sessionId;
     this.claudePath = options.claudePath || 'claude';
+  }
+
+  async connect(): Promise<void> {
+    return;
+  }
+
+  async *send(input: AgentInput): AsyncIterable<AgentEvent> {
+    if (input.type === 'action_response') {
+      return;
+    }
+
+    const queue: AgentEvent[] = [];
+    let closed = false;
+    let error: Error | null = null;
+    let notify: (() => void) | null = null;
+
+    const wake = () => {
+      notify?.();
+      notify = null;
+    };
+    const onEvent = (raw: RawEvent) => {
+      queue.push(this.rawToAgentEvent(raw));
+      wake();
+    };
+    const onClose = () => {
+      closed = true;
+      wake();
+    };
+    const onError = (err: Error) => {
+      error = err;
+      wake();
+    };
+
+    this.on('event', onEvent);
+    this.once('close', onClose);
+    this.once('error', onError);
+
+    this.start(input.text);
+    yield { type: 'task_started', taskId: input.taskId || input.sessionId || this.sessionId };
+
+    try {
+      while (!closed || queue.length > 0) {
+        if (error) {
+          throw error;
+        }
+        const next = queue.shift();
+        if (next) {
+          yield next;
+          continue;
+        }
+        await new Promise<void>((resolve) => {
+          notify = resolve;
+        });
+      }
+    } finally {
+      this.off('event', onEvent);
+      this.off('close', onClose);
+      this.off('error', onError);
+    }
+  }
+
+  async handleUserAction(action: DeviceAction): Promise<void> {
+    this.sendAction(action.type, action.taskId || this.sessionId);
+  }
+
+  async disconnect(): Promise<void> {
+    await this.stop();
   }
 
   /** Launch Claude Code and begin capturing output. */
@@ -132,5 +203,12 @@ export class ClaudeCodeAdapter extends EventEmitter {
     };
 
     this.emit('event', event);
+  }
+
+  private rawToAgentEvent(raw: RawEvent): AgentEvent {
+    if (raw.source === 'stderr') {
+      return { type: 'task_failed', taskId: this.sessionId, error: raw.rawOutput };
+    }
+    return { type: 'text', content: raw.rawOutput };
   }
 }

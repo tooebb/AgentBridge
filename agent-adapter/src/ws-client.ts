@@ -59,6 +59,7 @@ export class AgentBridgeClient extends EventEmitter {
             type: msg.event.action.type,
             taskId: msg.event.task_id,
             deviceType: msg.event.action.device_type,
+            text: msg.event.action.text,
           });
         }
       } catch {

@@ -1,4 +1,5 @@
 import { Context, EventType, RawEvent, Severity, UnifiedMessage } from './types';
+import type { AgentEvent } from './adapters/types';
 
 /**
  * ClassificationRule defines a single pattern for matching raw agent output.
@@ -136,6 +137,31 @@ export class EventNormalizer {
     };
   }
 
+  fromAgentEvent(event: AgentEvent): UnifiedMessage {
+    const { eventType, title, body, severity } = this.mapAgentEvent(event);
+
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      task_id: ('taskId' in event ? event.taskId : '') || this.sessionId,
+      session_id: this.sessionId,
+      event_type: eventType,
+      title,
+      body,
+      severity,
+      risk_score: 'risk' in event ? event.risk : 0,
+      risk_blocked: false,
+      available_actions: event.type === 'needs_approval'
+        ? [
+            { action_type: 'approve', label: 'Approve', confirmation_required: false },
+            { action_type: 'reject', label: 'Reject', confirmation_required: false },
+            { action_type: 'view_details', label: 'View Details', confirmation_required: false },
+          ]
+        : [],
+      timestamp: new Date().toISOString(),
+      agent_id: this.agentId,
+    };
+  }
+
   /** Run classification rules in priority order. */
   private classify(raw: RawEvent, ctx: Context): EventType {
     const sorted = [...rules].sort((a, b) => a.priority - b.priority);
@@ -190,6 +216,72 @@ export class EventNormalizer {
         return 'warning';
       default:
         return 'info';
+    }
+  }
+
+  private mapAgentEvent(event: AgentEvent): {
+    eventType: EventType;
+    title: string;
+    body: string;
+    severity: Severity;
+  } {
+    switch (event.type) {
+      case 'task_started':
+        return {
+          eventType: 'task_started',
+          title: event.taskId || 'Task started',
+          body: 'Task started',
+          severity: 'info',
+        };
+      case 'tool_call':
+        return {
+          eventType: 'task_running',
+          title: `Tool call: ${event.tool}`,
+          body: JSON.stringify(event.args),
+          severity: 'info',
+        };
+      case 'task_blocked':
+        return {
+          eventType: 'task_blocked',
+          title: 'Task blocked',
+          body: event.reason,
+          severity: 'warning',
+        };
+      case 'needs_approval':
+        return {
+          eventType: 'needs_approval',
+          title: `Approval required: ${event.tool}`,
+          body: `Risk score: ${event.risk}`,
+          severity: event.risk >= 0.7 ? 'critical' : 'warning',
+        };
+      case 'task_failed':
+        return {
+          eventType: 'task_failed',
+          title: 'Task failed',
+          body: event.error,
+          severity: 'critical',
+        };
+      case 'task_completed':
+        return {
+          eventType: 'task_completed',
+          title: 'Task completed',
+          body: event.summary,
+          severity: 'info',
+        };
+      case 'done':
+        return {
+          eventType: 'task_completed',
+          title: 'Task completed',
+          body: event.text,
+          severity: 'info',
+        };
+      case 'text':
+        return {
+          eventType: 'task_running',
+          title: 'Agent output',
+          body: event.content.slice(0, 500),
+          severity: 'info',
+        };
     }
   }
 }
