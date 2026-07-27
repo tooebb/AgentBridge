@@ -13,6 +13,7 @@
     "test": "node device-session.test.js && node roundtrip-test.js",
     "test:state": "node device-session.test.js",
     "test:e2e": "node e2e-replay-action-test.js",
+    "test:w3": "node w3-readiness-check.js",
     "demo": "node orchestrator.js --scenario full --mode auto --speed normal",
     "demo:step": "node orchestrator.js --scenario full --mode step --speed slow",
     "demo:quick": "node orchestrator.js --scenario short --speed fast"

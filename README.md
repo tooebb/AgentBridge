@@ -215,6 +215,18 @@ npm run phone
 npm run glass
 ```
 
+### W3 实机闭环联调准备
+
+进入真实 W3 眼镜联调前，先执行模拟 readiness 检查：
+
+```bash
+# 先启动 Core，再运行
+cd mock-device
+SERVER=http://127.0.0.1:8080 npm run test:w3
+```
+
+该脚本模拟 `ar_glasses` 客户端，验证眼镜端审批消息、TTS/屏显 overrides、按键/语音 approve 回传、`agent_adapter` relay、以及断连重连后的 `last_acked_seq` 补发。完整实机验收清单见 `docs/w3-integration-checklist.md`。
+
 ## 事件类型 & 状态机
 
 ### 6 种事件类型
