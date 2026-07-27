@@ -4,6 +4,7 @@
 > **MVP 目标**：4-6 周
 > **首个硬件终端**：Rokid Glass 3（AR 眼镜）
 > **参考对比**：GPT 提供的架构骨架（6 层模型）→ 融合优化为当前方案
+> **当前文档状态**：2026-07-27 已按仓库实现同步；生产化规划与真实 Phone/Glass 客户端实现明确标注为后续工作。
 
 ---
 
@@ -114,8 +115,8 @@ PC Agent stdout
 
 | 组件 | 语言 | 框架/库 | 协议 | 存储 |
 |------|------|---------|------|------|
-| Middleware Core | **Golang** | gorilla/websocket + chi router | WSS, HTTPS REST | PostgreSQL + Redis |
-| Agent Adapter | **Node.js/TS** | child_process, EventEmitter | Stdio pipe, WSS | 无（无状态） |
+| Middleware Core | **Golang** | gorilla/websocket + chi router | WSS, HTTPS REST | 内存 EventStore；可选 SQLite |
+| Agent Adapter | **Node.js/TS** | Anthropic SDK, child_process, ws | REST/WS, stdio | 无（无状态） |
 | Phone（改造已有） | **Kotlin** | OkHttp, PSecuritySDK | WSS, BT, P2P | SQLite（离线队列） |
 | Glass（改造已有） | **Kotlin** | GlassSdk | BT | SharedPreferences |
 | Web Dashboard | **React/TS** | React 18 + Vite | WSS, REST | 无 |
@@ -124,14 +125,15 @@ PC Agent stdout
 
 - **Golang 做 Core**：goroutine 天然适合 "一个 session 一个 goroutine" 的并发模型；类型安全保护状态机正确性；编译为单二进制，部署简单
 - **Node.js 做 Adapter**：LLM CLI 工具（claude/codex）的 `child_process.spawn` + `readline` 是最自然的接口；TypeScript 的类型系统足够 Adapter 层的复杂度
-- **WebSocket 不做 MQTT/gRPC**：浏览器/手机/Node.js 都原生支持 WebSocket，不需要额外 broker；gRPC-web 移动端支持差需要 Envoy 代理；MQTT 的 pub/sub 能力用 Redis PubSub 内部替代
-- **PostgreSQL + Redis**：PG 存事件历史做审计，Redis 做热路径（session 状态、设备在线、离线队列）
+- **WebSocket 不做 MQTT/gRPC**：浏览器/手机/Node.js 都原生支持 WebSocket，不需要额外 broker；gRPC-web 移动端支持差需要 Envoy 代理；跨实例 pub/sub 后续可用 Redis 等基础设施补充
+- **当前存储实现**：默认内存环形缓冲；设置 `AGENTBRIDGE_EVENT_DB` 后使用 SQLite 保存事件和设备 ack，支持断连重连后的 `last_acked_seq` 补发。
+- **生产化存储规划**：PostgreSQL/Redis 仍可作为后续审计、跨实例队列和在线状态方案，但不是当前仓库实现。
 
 ---
 
 ## 3. 核心领域模型
 
-### 3.1 事件类型（8 种）
+### 3.1 事件类型（6 个公开任务事件 + 2 个内部管理事件）
 
 ```go
 EventTaskStarted   = "task_started"     // 任务开始
@@ -170,7 +172,7 @@ type UnifiedMessage struct {
 Server → Client：
 {
   direction: "server_to_client",
-  message_id, session_id, timestamp,
+  message_id, session_id, seq, is_replay, timestamp,
   event: { type, task_id, title, body, severity, risk_score, available_actions },
   device_overrides: {
     ar_glasses:  { tts_text, card_title, card_body, quick_actions },
@@ -183,12 +185,14 @@ Server → Client：
 Client → Server：
 {
   direction: "client_to_server",
-  session_id, task_id,
-  action: { type: "approve"|"reject"|"continue"|"pause"|"view_details", device_type, timestamp }
+  session_id, task_id, last_acked_seq,
+  action: { type: "approve"|"reject"|"continue"|"pause"|"view_details", device_type, timestamp, text? }
 }
 ```
 
 **为什么 device_overrides 由服务端生成？** 每个设备的能力差异在服务端统一处理，新增设备类型无需客户端更新。客户端只拿自己对应 key 的数据即可。
+
+**可靠性字段说明**：`seq` 是 Core 对每个 session 写入 EventStore 时生成的单调序号；客户端处理后维护 `last_acked_seq`，重连时携带该值，Core 会补发之后的事件并设置 `is_replay=true`。`action.text` 用于按键动作之外的语音/文本输入预留。
 
 ---
 
@@ -289,7 +293,7 @@ type Approval struct {
 ```
 
 **重试策略**：
-- 手机离线：暂存 Redis 队列，设备重连后重发
+- 手机离线：当前通过 EventStore 记录 `seq` 和设备 `last_acked_seq`，设备重连后补发未确认事件；跨实例队列属于后续生产化规划
 - 最多重试 3 次，间隔递增：1min → 3min → 5min
 - 全部失败 → 标记 EXPIRED
 
@@ -346,9 +350,20 @@ type NotificationPolicy struct {
 
 ---
 
-## 10. 数据库设计
+## 10. 存储设计
 
-### PostgreSQL（持久化，审计用）
+### 当前实现：内存 + SQLite
+
+| 表 | 用途 | 关键字段 |
+|----|------|---------|
+| events | 事件历史和 replay | session_id, seq, message_id, raw_json, created_at |
+| device_acks | 设备确认位点 | session_id, device_type, last_acked_seq, updated_at |
+
+默认 `store.NewEventStore(200)` 使用每 session 最多 200 条事件的内存环形缓冲。设置 `AGENTBRIDGE_EVENT_DB=/path/to/events.db` 后，`store.NewSQLiteEventStore` 会创建上述 SQLite 表，并在设备连接时按 `last_acked_seq` 查询补发消息。
+
+与 2026-07-26 历史计划相比，当前实现没有新增 `store/sqlite/` 子包、独立 Store 接口或 approvals SQLite 表；SQLite 先服务于事件历史、设备 ack 和 replay 闭环。审批记录仍由当前进程内的 `approval.Manager` 管理，持久化审计留给后续生产化切片。
+
+### 生产化规划：PostgreSQL（持久化，审计用）
 
 | 表 | 用途 | 关键字段 |
 |----|------|---------|
@@ -360,7 +375,7 @@ type NotificationPolicy struct {
 | device_sessions | 设备连接 | session_id→, device_type, connection_state, last_seen |
 | approvals | 审批记录 | task_id→, status, risk_score, timeout_at, retry_count |
 
-### Redis（热路径，低延迟）
+### 生产化规划：Redis（热路径，低延迟）
 
 | Key Pattern | 用途 | TTL |
 |-------------|------|-----|
@@ -373,6 +388,8 @@ type NotificationPolicy struct {
 ---
 
 ## 11. 安全设计
+
+当前仓库尚未实现本节能力；以下是生产化设计目标。
 
 - **认证流程**：API Key（bcrypt 存）→ 换取 JWT（PC 8h / 设备 24h）
 - **设备授权**：Device JWT 仅限所属 session，操作只能响应对应事件（防重放）
@@ -433,7 +450,7 @@ Middleware Core ← WSS → Phone App（加 AgentBridgeService）
 |----|------|------|------|
 | 1 | Core 语言 | **Golang** | goroutine 并发模型天然适合 WebSocket Hub；类型安全保护状态机 |
 | 2 | 通信协议 | **WebSocket** | 全端原生，双向低延迟，无额外 broker 依赖 |
-| 3 | Glass 协议 | **复用 BT CustomMessage** | `{type, message}` 扩展 3 个 type，无需新协议 |
+| 3 | Glass 数据通道 | **WebSocket 直连 Core，CXR 仅管生命周期** | `sendCustomCmd` 已确认无法稳定进入 CustomApp 订阅回调，数据面改走标准 WS |
 | 4 | 设备转换 | **服务端生成 device_overrides** | 减少终端功耗，新设备零客户端更新 |
 | 5 | TTS/ASR | **手机本地 TTS + Glass 离线命令** | 不依赖 Rokid AK/SK（待商务获取），MVP 可用 |
 | 6 | Agent Adapter 部署 | **PC 本地** | 低延迟，与 Agent 同进程组；未来可迁云 |
@@ -459,37 +476,48 @@ agentbridge/
 │   │   ├── device/dispatcher.go # 设备路由 + 格式转换
 │   │   ├── approval/manager.go  # 审批管理器
 │   │   ├── notify/engine.go     # 通知引擎
-│   │   ├── store/postgres.go    # PostgreSQL 数据层
-│   │   └── store/redis.go       # Redis 缓存/队列
-│   ├── migrations/              # SQL 迁移脚本
-│   ├── go.mod / go.sum
-│   └── Dockerfile
+│   │   └── store/eventstore.go  # 内存/SQLite 事件存储 + ack/replay
+│   └── go.mod / go.sum
 │
 ├── agent-adapter/               # Node.js/TS Agent 适配器
 │   ├── src/
 │   │   ├── index.ts             # 入口，启动适配器
 │   │   ├── adapters/
-│   │   │   ├── claude.ts        # Claude Code 适配器
-│   │   │   └── codex.ts         # Codex CLI 适配器
+│   │   │   ├── claude-api.ts    # Claude API 适配器
+│   │   │   ├── claude.ts        # Claude Code CLI 适配器
+│   │   │   ├── generic-cli.ts   # 通用 CLI 适配器
+│   │   │   └── openai-compatible.ts
 │   │   ├── context/engine.ts    # Context Engine（滑动窗口）
 │   │   ├── normalizer.ts        # Event Normalization（正则+上下文）
 │   │   └── ws-client.ts         # WebSocket 客户端（连接 Core）
 │   ├── package.json / tsconfig.json
-│   └── README.md
 │
-├── phone-agentbridge/           # Phone App 扩展（复制自 glass3sdkphonedemo + 修改）
-├── glass-agentbridge/           # Glass App 扩展（复制自 glassdemo + 修改）
-├── web-dashboard/               # React/TS 监控面板
+├── dashboard/                   # React/TS 监控面板
+├── mock-device/                 # phone/watch/glass/earbuds 模拟客户端和联调脚本
 └── docs/
-    └── architecture.md          # 本文档
+    ├── architecture.md          # 本文档
+    ├── requirements.md          # 产品需求
+    └── w3-integration-checklist.md
 ```
 
 ---
 
 ## 16. 验证方案
 
-1. **W1 验证**：启动 Claude Code 执行一个任务 → Core 日志中看到 `task_started` → `task_running` → `task_completed` 分类链路，事件写入 PostgreSQL
-2. **W2 验证**：Phone App 连接 Core → 手机收到 Agent 事件卡片 → card UI 正确渲染
-3. **W3 验证**：Glass 收到通知 + TTS 播报 → 用户单击眼镜按键 → Agent 收到 "approve" → 继续执行（完整闭环）
-4. **W4 验证**：Agent 尝试执行 `rm -rf` → 手机/眼镜显示「返回 PC 确认」，按钮不可点击
-5. **W5 验证**：Dashboard 实时展示 session 事件流、状态变迁时序图、审批历史
+1. **Core 验证**：`cd middleware-core && go test ./...`
+2. **Mock Device 验证**：先启动 Core，再执行 `cd mock-device && npm run test:e2e`
+3. **W3 模拟验证**：先启动 Core，再执行 `cd mock-device && SERVER=http://127.0.0.1:8080 npm run test:w3`
+4. **W3 主机预检**：真实联调前执行 `cd mock-device && SERVER=http://127.0.0.1:8080 npm run w3:preflight`；现场要求真机时增加 `W3_REQUIRE_DEVICE=1`
+5. **风险拦截验证**：Agent 尝试执行 `rm -rf` → 手机/眼镜显示「返回 PC 确认」，按钮不可点击
+6. **Dashboard 验证**：Dashboard 实时展示 session 事件流、状态变迁时序图、审批历史
+
+## 17. 当前实现进度对照
+
+| 方向 | 状态 | 说明 |
+|------|------|------|
+| Core 事件链路 | 已实现 | REST ingest、状态机、风控、审批、通知、设备分发、Dashboard 广播 |
+| EventStore 可靠性 | 已实现 | 内存 ring buffer + 可选 SQLite，支持 `seq`、`last_acked_seq`、replay |
+| Agent provider | 已实现 | `claude-api`、`openai-compatible`、`generic-cli`、`claude-cli` |
+| Mock Device / W3 readiness | 已实现 | 状态层、e2e replay/action、W3 readiness 和 preflight |
+| 真实 Phone/Glass App | 待实现 | 本仓库只有协议、模拟器和联调清单；客户端工程需补 OkHttp WS、TTS、按键/语音绑定 |
+| 生产化安全/存储 | 待实现 | API key/JWT、设备授权、PostgreSQL/Redis、审批审计持久化 |

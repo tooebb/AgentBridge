@@ -6,7 +6,9 @@
 
 **架构思路：** SQLite 替代纯内存存储作为事件持久层；Hub.Register 新增 lastAckedSeq 参数支持重连时补发未确认事件；Agent Adapter 从 spawn+正则解析重构为统一 AgentAdapter 接口 + 多适配器 + Agent Hub 降级链
 
-**技术栈：** Go 1.21+ (chi, gorilla/websocket, mattn/go-sqlite3), TypeScript (ws, @anthropic-ai/sdk), Node.js 18+
+**原计划技术栈：** Go 1.21+ (chi, gorilla/websocket, mattn/go-sqlite3), TypeScript (ws, @anthropic-ai/sdk), Node.js 18+
+
+> 2026-07-27 归档状态：本计划的大部分核心目标已经完成，但实际实现做了收敛和路径调整。当前落地包括：协议字段 `seq/is_replay/last_acked_seq/action.text`、EventStore SQLite 持久化与 replay、AgentHub、Claude API、CLI fallback、generic-cli、OpenAI-compatible、mock-device ack/replay 状态层、e2e replay/action 验证、W3 readiness/preflight。未按本文原路径实现的内容包括独立 `store/sqlite/` 子包、完整 Store 接口、SQLite approvals 表、`mock-device/reconnect-test.js` 文件名和独立 Codex API adapter。SQLite 实际使用 `modernc.org/sqlite` 驱动。真实 Phone/Glass 客户端与生产化安全/审计仍是后续工作。
 
 ## 全局约束
 

@@ -1,5 +1,7 @@
 # AgentBridge
 
+> 当前文档状态：2026-07-27 已按代码实现同步。`docs/superpowers/` 下的 dated spec/plan 是历史设计和执行记录；当前使用、运行与验收以本 README、`CLAUDE.md` 和 `docs/w3-integration-checklist.md` 为准。
+
 > AI Agent 跨设备交互中间层 —— 让 Vibe Coding 不再被绑在电脑前。
 
 ### 问题
@@ -79,14 +81,15 @@ agentbridge/
 │       ├── notify/            # 通知引擎 (即时/聚合/静默 · per-device 策略)
 │       ├── device/            # 设备路由 (phone/watch/glass/earbuds 格式转换)
 │       ├── ws/                # WebSocket Hub · session 管理 · dashboard 广播
-│       └── store/             # 事件存储 (内存环形缓冲 · 200 events/session)
+│       └── store/             # 事件存储 (内存环形缓冲 · 可选 SQLite ack/replay)
 │
 ├── agent-adapter/             # Node.js Agent 适配器
 │   └── src/
-│       ├── index.ts           # 入口 · pipeline 串联
-│       ├── adapters/claude.ts # Claude Code spawn (--print --verbose stream-json)
+│       ├── index.ts           # 入口 · AgentHub + Core WebSocket 串联
+│       ├── hub.ts             # provider 选择和降级链
+│       ├── adapters/          # claude-api/openai-compatible/generic-cli/claude-cli
 │       ├── context/engine.ts  # 上下文引擎 (滑动窗口 5 事件 · 阶段推断)
-│       ├── normalizer.ts      # 事件分类 (6 正则规则 + 上下文消歧)
+│       ├── normalizer.ts      # AgentEvent 直接映射 + legacy raw output 分类
 │       └── ws-client.ts       # WS 客户端 (连接 Core · 自动重连)
 │
 └── dashboard/                 # React Web 监控面板
@@ -130,12 +133,12 @@ npm run dev
 # 浏览器打开 http://localhost:5173
 ```
 
-### 3. 运行 Agent Adapter 集成测试
+### 3. 运行 Agent Adapter
 
 ```bash
 cd agent-adapter
 npm install
-npx tsx src/index.ts
+npm run dev
 # 连接到 Core，spawn Claude Code，发送事件
 # Dashboard 可实时看到事件流
 ```
@@ -174,10 +177,14 @@ curl http://localhost:8080/api/v1/sessions
 # 查看某 session 事件历史
 curl http://localhost:8080/api/v1/events/{session_id}
 
-# 验证 SQLite replay + last_acked_seq + 设备动作回传到 agent_adapter
+# 验证 Phone/Glass 客户端 ack、去重和动作回传状态层
 cd mock-device
 npm install
-GO_BIN=/path/to/go npm run test:e2e
+npm run test:state
+
+# 验证 SQLite replay + last_acked_seq + 设备动作回传到 agent_adapter
+cd mock-device
+npm run test:e2e
 ```
 
 ### Phone / Glass 协议对齐
@@ -279,18 +286,33 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 - **中风险** (0.3–0.7)：需确认审批
 - **高风险** (≥0.7 或 blockOnMobile)：仅可在 PC 端审批
 
-## 当前状态 (2026-07-23)
+## 当前状态 (2026-07-27)
 
 | 模块 | 状态 | 说明 |
 |------|------|------|
-| Middleware Core | ✓ 完成 | 全部 6 端点 · 状态机 18 转移 · forGlass 6 事件类型独立渲染 |
-| Agent Adapter | ✓ 完成 | Claude Code 端到端集成测试通过 |
-| Web Dashboard | ✓ 完成 | 实时推送 + 历史事件 · 全事件类型展示 |
-| Mock Device Client | ✓ 完成 | phone/watch/glass/earbuds 四端模拟 · `npm run phone` 启动 |
-| Glass App (WebSocket 客户端) | 待开发 | WS 直连 Core + CXR 管 install/start 生命周期 |
-| Phone App (CXR 生命周期) | 待开发 | CXR-L SDK 仅用于 `appUploadAndInstall` / `appStart` |
-| 数据库 (PostgreSQL/Redis) | 待开发 | 当前使用内存存储 |
-| 认证/安全 | 待开发 | — |
+| Middleware Core | 已实现 | REST/WS 端点、状态机、风控、审批、通知策略、设备分发、Dashboard 广播、事件历史 |
+| Event Store | 已实现 | 默认内存环形缓冲；`AGENTBRIDGE_EVENT_DB` 启用 SQLite 持久化、`seq`、`last_acked_seq` 和重连补发 |
+| Agent Adapter | 已实现 | `claude-api` / `openai-compatible` / `generic-cli` / `claude-cli` provider 选择，设备动作可 relay 回 agent |
+| Web Dashboard | 已实现 | session 列表、历史事件、实时事件流、事件类型展示 |
+| Mock Device Client | 已实现 | phone/watch/glass/earbuds 四端模拟；ack、replay、approve/reject/continue/pause/view_details 回传 |
+| W3 模拟联调 | 已实现 | `npm run test:w3` 和 `npm run w3:preflight` 覆盖 W3 协议 readiness |
+| Glass App (真实客户端) | 待开发 | 真实眼镜端 OkHttp WS 客户端、TTS、按键/语音绑定仍需在客户端工程实现 |
+| Phone App (真实客户端) | 待开发 | CXR-L SDK 仅用于 `appUploadAndInstall` / `appStart` 生命周期管理 |
+| 认证/安全 | 待开发 | 当前未实现 API key/JWT/设备授权 |
+
+### superpowers 历史计划对照
+
+`docs/superpowers/` 下的 2026-07-26 spec/plan 是历史设计和执行记录，其中大部分核心目标已经落地，但部分文件路径和实现方式被后续实现调整过：
+
+| 历史目标 | 当前状态 |
+|----------|----------|
+| SQLite 持久化、`seq`、`last_acked_seq`、重连补发 | 已完成；落地在 `middleware-core/internal/store/eventstore.go`，通过 `AGENTBRIDGE_EVENT_DB` 启用 |
+| Claude API 主路径 + CLI fallback | 已完成；同时补了 `openai-compatible` 和 `generic-cli` |
+| Agent Adapter 统一接口与 AgentHub | 已完成 |
+| Mock Device 断连补发/动作回传验证 | 已完成；实际文件是 `mock-device/e2e-replay-action-test.js` 和 `device-session.js` |
+| Phone/Glass 协议对齐 | 仓库内 mock-device 状态层已完成；真实客户端仍需在手机/眼镜工程中实现 |
+| W3 实机闭环 | 仓库内 readiness、preflight 和文档清单已完成；真实设备现场联调仍待执行 |
+| PostgreSQL/Redis、完整认证安全、通用模型 provider runtime | 未作为当前切片实现；保留为后续生产化规划 |
 
 ### CXR-L SDK 联调（设备：华为 NOP_AN00 + Rokid RG-glasses）
 
@@ -311,6 +333,7 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 - WebSocket 负责：Core ↔ 眼镜所有数据通信
 - 协议：标准 JSON，与 Dashboard / Mock Device 同一套
 - 眼镜端：OkHttp WS 客户端连接 `ws://<PC-IP>:8080/ws/{sessionID}?device_type=ar_glasses`
+- 本仓库当前完成 Core 协议、mock-device 模拟和联调清单；真实 W3/手机客户端实现不在当前代码目录内。
 
 ## 设备通知策略
 
@@ -325,6 +348,8 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 
 - [架构设计方案](docs/architecture.md) — 完整设计文档（13 章节）
 - [业务需求](docs/requirements.md) — 产品需求说明
+- [W3 实机闭环联调清单](docs/w3-integration-checklist.md) — W3 接入前置检查、协议要求和验收标准
+- `docs/superpowers/` — 2026-07-26 设计/计划归档，保留作历史记录，不作为当前运行说明
 
 ## License
 

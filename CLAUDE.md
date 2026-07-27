@@ -31,12 +31,12 @@ cd mock-device && npm install && npm run phone
 
 - `middleware-core/` — 不要在这里 `npm install`
 - `agent-adapter/`, `dashboard/`, `mock-device/` — 各自有独立 `package.json`
-- `docs/` — 架构设计和需求文档（不要往里面加新文件除非用户要求）
-- 没有 `.git` repo；代码通过文件夹管理版本
+- `docs/` — 架构设计、需求、W3 联调清单和历史设计/计划文档
+- 当前目录是 Git 仓库；改动前后用 `git status --short --branch` 确认工作区状态
 
-## 当前状态 (2026-07-23)
+## 当前状态 (2026-07-27)
 
-Middleware Core / Agent Adapter / Web Dashboard / Mock Device Client **已完成**。
+Middleware Core / Agent Adapter / Web Dashboard / Mock Device Client **已有可运行实现**；真实 Phone / Glass 客户端仍待在客户端工程内完成。
 
 ### CXR-L SDK 联调（设备：华为 NOP_AN00 + Rokid RG-glasses）
 
@@ -56,9 +56,11 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device Client **已完成
 
 **方案 B — WebSocket 直连 + CXR 仅管生命周期**（当前方向）
 - CXR 负责：应用安装与启动（已确认可用）
-- WebSocket 负责：Core ↔ 眼镜所有数据通信（审批、状态、通知）
-- 协议：标准 JSON，与 Dashboard/Mock Device 同一套
-- 眼镜网络路径：同一 WiFi → `ws://<PC-IP>:8080/ws`，或 ADB reverse（开发）
-- 状态：Core Device Dispatcher 已适配眼镜（6 事件类型 × 独立渲染），眼镜端 OkHttp WS 客户端待实现
+- WebSocket 负责：Core ↔ 眼镜所有数据通信（审批、状态、通知、重连补发）
+- 协议：标准 JSON，与 Dashboard/Mock Device 同一套；设备连接 `ws://<PC-IP>:8080/ws/{session_id}?device_type=ar_glasses`
+- 状态：Core Device Dispatcher 已适配眼镜（6 个公开任务事件 × 独立渲染），`mock-device` 已覆盖 ack/replay/动作回传；真实眼镜端 OkHttp WS 客户端待实现
 
-数据库 / 认证 **待开发**。
+存储 / 认证状态：
+- 事件存储默认使用内存环形缓冲；设置 `AGENTBRIDGE_EVENT_DB=/path/to/events.db` 后启用 SQLite 持久化、`last_acked_seq` 和重连补发。
+- PostgreSQL/Redis 仍是后续生产化规划，不是当前实现。
+- 认证/安全仍待开发。

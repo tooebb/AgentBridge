@@ -1,8 +1,10 @@
 # AgentBridge V2 架构设计文档
 
 **日期：** 2026-07-26
-**状态：** 已确认，待实施
+**状态：** 历史归档；大部分 Phase 1 核心目标已在 2026-07-27 落地，当前实现以 README、CLAUDE.md、docs/architecture.md 和代码为准
 **范围：** Agent Adapter 重构 + Core 可靠性层 + Glass 客户端 + 协议向前兼容
+
+> 归档说明：本文保留为设计来源和执行记录，不再作为最新运行说明。后续实现调整过部分路径与范围：SQLite 事件存储落在 `middleware-core/internal/store/eventstore.go`，没有创建 `store/sqlite/` 子包；断连补发验证落在 `mock-device/e2e-replay-action-test.js` 与 `device-session.js`；Agent provider 增加了 `openai-compatible` 和 `generic-cli`，未单独实现 `codex-api`；真实 Phone/Glass 客户端仍待在客户端工程中实现。
 
 ---
 
