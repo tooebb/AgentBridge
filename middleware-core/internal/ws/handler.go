@@ -65,6 +65,7 @@ func HandleUpgrade(
 	hub *Hub,
 	sessionID string,
 	deviceType domain.DeviceType,
+	replayMessages []*domain.DeviceMessage,
 	onMessage OnMessageFunc,
 ) error {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -76,6 +77,20 @@ func HandleUpgrade(
 	if err != nil {
 		conn.Close()
 		return err
+	}
+
+	for _, msg := range replayMessages {
+		data, err := json.Marshal(msg)
+		if err != nil {
+			conn.Close()
+			hub.Unregister(sessionID, deviceType)
+			return err
+		}
+		select {
+		case sendCh <- data:
+		default:
+			log.Printf("ws: replay queue full session=%s device=%s seq=%d", sessionID, deviceType, msg.Seq)
+		}
 	}
 
 	handler := &ClientHandler{

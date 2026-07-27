@@ -102,6 +102,8 @@ type DeviceMessage struct {
 	Direction string                       `json:"direction"`
 	MessageID string                       `json:"message_id"`
 	SessionID string                       `json:"session_id"`
+	Seq       int64                        `json:"seq,omitempty"`
+	IsReplay  bool                         `json:"is_replay,omitempty"`
 	Timestamp int64                        `json:"timestamp"`
 	Event     *UnifiedMessage              `json:"event"`
 	Overrides map[DeviceType]*DeviceOutput `json:"device_overrides"`
@@ -119,10 +121,11 @@ type DeviceOutput struct {
 
 // ClientMessage is an incoming action from a device back to the middleware.
 type ClientMessage struct {
-	Direction string       `json:"direction"`
-	SessionID string       `json:"session_id"`
-	TaskID    string       `json:"task_id"`
-	Action    ClientAction `json:"action"`
+	Direction    string       `json:"direction"`
+	SessionID    string       `json:"session_id"`
+	TaskID       string       `json:"task_id"`
+	LastAckedSeq int64        `json:"last_acked_seq,omitempty"`
+	Action       ClientAction `json:"action"`
 }
 
 // ClientAction is the user action payload from a device.
@@ -130,6 +133,7 @@ type ClientAction struct {
 	Type       ActionType `json:"type"`
 	DeviceType DeviceType `json:"device_type"`
 	Timestamp  int64      `json:"timestamp"`
+	Text       string     `json:"text,omitempty"`
 }
 
 // Session holds the runtime state of one agent session.

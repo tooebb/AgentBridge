@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"agentbridge/internal/approval"
@@ -33,6 +35,17 @@ type Server struct {
 }
 
 func main() {
+	eventStore := store.NewEventStore(200)
+	if dbPath := os.Getenv("AGENTBRIDGE_EVENT_DB"); dbPath != "" {
+		sqliteStore, err := store.NewSQLiteEventStore(dbPath, 200)
+		if err != nil {
+			log.Fatalf("server: sqlite event store: %v", err)
+		}
+		defer sqliteStore.Close()
+		eventStore = sqliteStore
+		log.Printf("server: SQLite event store enabled at %s", dbPath)
+	}
+
 	srv := &Server{
 		router:      chi.NewRouter(),
 		hub:         ws.NewHub(),
@@ -41,7 +54,7 @@ func main() {
 		dispatcher:  device.NewDispatcher(),
 		approvalMgr: approval.NewManager(),
 		notifyEng:   notify.NewEngine(notify.DefaultPolicies()),
-		eventStore:  store.NewEventStore(200),
+		eventStore:  eventStore,
 	}
 
 	srv.setupRoutes()
@@ -142,7 +155,9 @@ func (s *Server) handleAgentEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 6. Store event and broadcast to dashboards.
-	s.eventStore.Append(msg.SessionID, deviceMsg)
+	if _, err := s.eventStore.Append(msg.SessionID, deviceMsg); err != nil {
+		log.Printf("server: event store append failed: %v", err)
+	}
 	s.hub.BroadcastToDashboard(deviceMsg)
 
 	log.Printf("server: event %s -> state %s (task=%s session=%s risk=%.2f devices=%d)",
@@ -167,10 +182,30 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		deviceTypeStr = "phone"
 	}
 	deviceType := domain.DeviceType(deviceTypeStr)
+	lastAckedSeq := int64(0)
+	if seqStr := r.URL.Query().Get("last_acked_seq"); seqStr != "" {
+		seq, err := strconv.ParseInt(seqStr, 10, 64)
+		if err != nil || seq < 0 {
+			http.Error(w, `{"error":"invalid last_acked_seq"}`, http.StatusBadRequest)
+			return
+		}
+		lastAckedSeq = seq
+	} else if seq, err := s.eventStore.DeviceAck(sessionID, deviceType); err == nil {
+		lastAckedSeq = seq
+	} else {
+		log.Printf("server: device ack lookup failed session=%s device=%s: %v", sessionID, deviceType, err)
+	}
+
+	replayMessages, err := s.eventStore.ReplaySince(sessionID, lastAckedSeq)
+	if err != nil {
+		log.Printf("server: replay lookup failed session=%s seq=%d: %v", sessionID, lastAckedSeq, err)
+		http.Error(w, `{"error":"replay lookup failed"}`, http.StatusInternalServerError)
+		return
+	}
 
 	log.Printf("ws: new connection session=%s device=%s", sessionID, deviceType)
 
-	if err := ws.HandleUpgrade(w, r, s.hub, sessionID, deviceType, s.onDeviceMessage); err != nil {
+	if err := ws.HandleUpgrade(w, r, s.hub, sessionID, deviceType, replayMessages, s.onDeviceMessage); err != nil {
 		log.Printf("ws: upgrade failed: %v", err)
 		http.Error(w, `{"error":"websocket upgrade failed"}`, http.StatusBadRequest)
 		return
@@ -181,6 +216,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (s *Server) onDeviceMessage(sessionID string, msg *domain.ClientMessage) {
 	log.Printf("server: received action %s from device %s (session=%s task=%s)",
 		msg.Action.Type, msg.Action.DeviceType, sessionID, msg.TaskID)
+
+	if msg.LastAckedSeq > 0 {
+		if err := s.eventStore.UpdateDeviceAck(sessionID, msg.Action.DeviceType, msg.LastAckedSeq); err != nil {
+			log.Printf("server: device ack update failed session=%s device=%s seq=%d: %v",
+				sessionID, msg.Action.DeviceType, msg.LastAckedSeq, err)
+		}
+	}
 
 	switch msg.Action.Type {
 	case domain.ActionApprove, domain.ActionReject:

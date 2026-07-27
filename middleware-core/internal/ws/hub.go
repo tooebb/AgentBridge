@@ -48,7 +48,7 @@ func (h *Hub) Register(sessionID, userID string, deviceType domain.DeviceType) (
 	}
 
 	// Buffered channel to avoid blocking on slow consumers.
-	ch := make(chan []byte, 64)
+	ch := make(chan []byte, 256)
 	s.Devices[deviceType] = ch
 	return ch, nil
 }
