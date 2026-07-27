@@ -2,6 +2,7 @@
 
 const WebSocket = require('ws');
 const readline = require('readline');
+const { DeviceSession } = require('./device-session');
 
 // ── CLI args ──────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -32,6 +33,8 @@ if (hasFlag('help') || hasFlag('h')) {
     p[ause]   [task_id]  Pause running task
     v[iew]    [task_id]  Request detail view
     send [type] [title] [body]  Submit test event via REST
+    reconnect             Reconnect with last_acked_seq
+    status                Show device ack/replay state
     q[uit]               Exit
 `);
   process.exit(0);
@@ -97,27 +100,35 @@ async function sendEvent(event) {
 
 // ── Single device client ──────────────────────────────────────────────
 function connectDevice(sessionId, deviceType, label) {
-  const wsUrl = `${SERVER.replace(/^http/, 'ws')}/ws/${sessionId}?device_type=${deviceType}`;
-  log(label, 'cyan', `connecting to ${wsUrl}`);
+  const state = new DeviceSession({ server: SERVER, sessionId, deviceType });
+  return openDeviceConnection(state, label);
+}
 
+function openDeviceConnection(state, label) {
+  const wsUrl = state.wsUrl();
+  log(label, 'cyan', `connecting to ${wsUrl}`);
   const ws = new WebSocket(wsUrl);
-  let lastTaskId = null;
 
   ws.on('open', () => {
+    state.markConnected();
     log(label, 'green', 'connected');
   });
 
   ws.on('message', (data) => {
     try {
       const msg = JSON.parse(data.toString());
-      displayMessage(msg, deviceType, label);
-      if (msg.event?.task_id) lastTaskId = msg.event.task_id;
+      const result = state.ingest(msg);
+      if (!result.accepted) {
+        log(label, 'dim', `ignored ${result.reason}`);
+        return;
+      }
+      displayMessage(msg, state.deviceType, label);
 
       if (AUTO && msg.event?.event_type === 'needs_approval' && !msg.event?.risk_blocked) {
         const taskId = msg.event.task_id;
         setTimeout(() => {
           log(label, 'yellow', `auto-approving task ${taskId}`);
-          sendAction(ws, sessionId, taskId, deviceType, 'approve');
+          sendAction(ws, state, taskId, 'approve');
         }, 500);
       }
     } catch {
@@ -126,6 +137,7 @@ function connectDevice(sessionId, deviceType, label) {
   });
 
   ws.on('close', () => {
+    state.markDisconnected();
     log(label, 'red', 'disconnected');
   });
 
@@ -133,22 +145,22 @@ function connectDevice(sessionId, deviceType, label) {
     log(label, 'red', `error: ${err.message}`);
   });
 
-  return { ws, lastTaskId: () => lastTaskId };
+  return { ws, state, lastTaskId: () => state.lastTaskId };
 }
 
-function sendAction(ws, sessionId, taskId, deviceType, actionType) {
-  const msg = {
-    direction: 'client_to_server',
-    session_id: sessionId,
-    task_id: taskId,
-    action: {
-      type: actionType,
-      device_type: deviceType,
-      timestamp: Date.now(),
-    },
-  };
+function reconnectDevice(conn, label) {
+  if (conn.ws && conn.ws.readyState === WebSocket.OPEN) {
+    conn.ws.close();
+  }
+  const reopened = openDeviceConnection(conn.state, label);
+  conn.ws = reopened.ws;
+  return conn;
+}
+
+function sendAction(ws, state, taskId, actionType, text) {
+  const msg = state.actionMessage(taskId, actionType, text);
   ws.send(JSON.stringify(msg));
-  log(deviceType, 'magenta', `sent: ${actionType} (task: ${taskId})`);
+  log(state.deviceType, 'magenta', `sent: ${actionType} (task: ${taskId}, ack: ${state.lastAckedSeq})`);
 }
 
 function displayMessage(msg, deviceType, label) {
@@ -183,7 +195,9 @@ function displayMessage(msg, deviceType, label) {
     console.log(`  ${c('cyan', `actions available: ${acts}`)}`);
   }
 
-  console.log(`  ${c('dim', `task_id: ${ev.task_id} | session: ${ev.session_id}`)}`);
+  const replay = msg.is_replay ? ' | replay' : '';
+  const seq = msg.seq ? ` | seq: ${msg.seq}${replay}` : '';
+  console.log(`  ${c('dim', `task_id: ${ev.task_id} | session: ${ev.session_id}${seq}`)}`);
 }
 
 // ── Interactive REPL ──────────────────────────────────────────────────
@@ -206,47 +220,47 @@ function startRepl(connections) {
     const arg2 = parts[2];
 
     // pick which connection to use
-    const conn = SIM_ALL && arg2
-      ? connections.find(c => c.type === arg2)
-      : connections[0];
+    const deviceArg = SIM_ALL ? parts.find(p => VALID_TYPES.includes(p)) : null;
+    const conn = deviceArg ? connections.find(c => c.type === deviceArg) : connections[0];
     if (!conn && ['a', 'approve', 'r', 'reject', 'p', 'pause', 'c', 'continue', 'v', 'view'].includes(cmd)) {
       console.log(c('red', 'no connection available'));
       rl.prompt();
       return;
     }
 
-    const { ws, lastTaskId, type, session } = conn;
-    const taskId = arg1 || lastTaskId();
+    const { ws, lastTaskId, type, state } = conn;
+    const taskId = arg1 && arg1 !== deviceArg ? arg1 : lastTaskId();
+    const trailingText = parts.slice(2).filter(p => p !== deviceArg).join(' ');
 
     switch (cmd) {
       case 'a':
       case 'approve':
         if (!taskId) { console.log(c('red', 'no task_id')); break; }
-        sendAction(ws, session, taskId, type, 'approve');
+        sendAction(ws, state, taskId, 'approve', trailingText);
         break;
 
       case 'r':
       case 'reject':
         if (!taskId) { console.log(c('red', 'no task_id')); break; }
-        sendAction(ws, session, taskId, type, 'reject');
+        sendAction(ws, state, taskId, 'reject', trailingText);
         break;
 
       case 'p':
       case 'pause':
         if (!taskId) { console.log(c('red', 'no task_id')); break; }
-        sendAction(ws, session, taskId, type, 'pause');
+        sendAction(ws, state, taskId, 'pause', trailingText);
         break;
 
       case 'c':
       case 'continue':
         if (!taskId) { console.log(c('red', 'no task_id')); break; }
-        sendAction(ws, session, taskId, type, 'continue');
+        sendAction(ws, state, taskId, 'continue', trailingText);
         break;
 
       case 'v':
       case 'view':
         if (!taskId) { console.log(c('red', 'no task_id')); break; }
-        sendAction(ws, session, taskId, type, 'view_details');
+        sendAction(ws, state, taskId, 'view_details', trailingText);
         break;
 
       case 'send': {
@@ -279,21 +293,33 @@ function startRepl(connections) {
         break;
       }
 
+      case 'reconnect':
+        reconnectDevice(conn, type);
+        break;
+
+      case 'status':
+        for (const item of connections) {
+          console.log(c('cyan', item.type), JSON.stringify(item.state.status()));
+        }
+        break;
+
       case 'h':
       case 'help':
         console.log(`
   ${c('bright', 'Commands:')}
-    a[pprove] [task_id] [device]  — approve a pending approval
-    r[eject]  [task_id] [device]  — reject a pending approval
-    c[ontinue] [task_id] [device] — continue a blocked/paused task
-    p[ause]   [task_id] [device] — pause a running task
-    v[iew]    [task_id] [device] — request detail view
+    a[pprove] [task_id] [device] [text] — approve a pending approval
+    r[eject]  [task_id] [device] [text] — reject a pending approval
+    c[ontinue] [task_id] [device] [text] — continue a blocked/paused task
+    p[ause]   [task_id] [device] [text] — pause a running task
+    v[iew]    [task_id] [device] [text] — request detail view
     send [event_type] [title] [body] — submit test event via REST
+    reconnect                 — reconnect with last_acked_seq
+    status                    — show ack/replay/device state
     help                       — this help
     q[uit]                     — exit
 
   ${c('dim', 'If task_id is omitted, uses the last received task_id.')}
-  ${c('dim', 'Append device type (phone/glass/watch/buds) in --simulate-all mode.')}
+  ${c('dim', 'Device clients dedupe seq, preserve last_acked_seq, and request replay on reconnect.')}
 `);
         break;
 

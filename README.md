@@ -180,6 +180,41 @@ npm install
 GO_BIN=/path/to/go npm run test:e2e
 ```
 
+### Phone / Glass 协议对齐
+
+设备端 WebSocket 统一连接：
+
+```bash
+ws://<core-host>/ws/{session_id}?device_type=phone
+ws://<core-host>/ws/{session_id}?device_type=ar_glasses
+```
+
+Phone/Glass 客户端需要维护本地 `last_acked_seq`。每次接受 `server_to_client` 消息后，若存在 `seq`，客户端应先按 `seq` 去重，再把本地 ack 更新为最大已处理序号；重连时带上 `last_acked_seq` 查询参数，Core 会补发之后的消息并标记 `is_replay=true`。设备动作回传也应带 `last_acked_seq`，并可在 `action.text` 中携带语音/文本输入：
+
+```json
+{
+  "direction": "client_to_server",
+  "session_id": "demo-session",
+  "task_id": "task-1",
+  "last_acked_seq": 12,
+  "action": {
+    "type": "approve",
+    "device_type": "ar_glasses",
+    "timestamp": 1785121200000,
+    "text": "approved from glasses"
+  }
+}
+```
+
+`mock-device` 已按这套规则实现 Phone/Glass 行为：自动维护 ack、重连时请求 replay、忽略重复 `seq`、展示 live/replay 状态，并在 approve/reject/continue/pause/view_details 回传中携带最新 `last_acked_seq`。可用以下命令做本地验证：
+
+```bash
+cd mock-device
+npm run test:state
+npm run phone
+npm run glass
+```
+
 ## 事件类型 & 状态机
 
 ### 6 种事件类型
