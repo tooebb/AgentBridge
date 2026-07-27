@@ -11,6 +11,7 @@
     "buds": "node mock-device.js --device-type earbuds",
     "all": "node mock-device.js --simulate-all",
     "test": "node roundtrip-test.js",
+    "test:e2e": "node e2e-replay-action-test.js",
     "demo": "node orchestrator.js --scenario full --mode auto --speed normal",
     "demo:step": "node orchestrator.js --scenario full --mode step --speed slow",
     "demo:quick": "node orchestrator.js --scenario short --speed fast"

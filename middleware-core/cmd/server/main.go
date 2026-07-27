@@ -59,7 +59,10 @@ func main() {
 
 	srv.setupRoutes()
 
-	addr := ":8080"
+	addr := os.Getenv("AGENTBRIDGE_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
 	log.Printf("AgentBridge Middleware Core starting on %s", addr)
 	if err := http.ListenAndServe(addr, srv.router); err != nil {
 		log.Fatalf("server: %v", err)
@@ -142,7 +145,12 @@ func (s *Server) handleAgentEvent(w http.ResponseWriter, r *http.Request) {
 		Overrides: overrides,
 	}
 
-	// 5. Notification check + send.
+	// 5. Store first so live deliveries include the same seq used for replay.
+	if _, err := s.eventStore.Append(msg.SessionID, deviceMsg); err != nil {
+		log.Printf("server: event store append failed: %v", err)
+	}
+
+	// 6. Notification check + send.
 	devices := s.hub.ConnectedDevices(msg.SessionID)
 	for _, dt := range devices {
 		if s.notifyEng.ShouldSend(dt, msg.SessionID, msg.TaskID, &msg) {
@@ -154,10 +162,7 @@ func (s *Server) handleAgentEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 6. Store event and broadcast to dashboards.
-	if _, err := s.eventStore.Append(msg.SessionID, deviceMsg); err != nil {
-		log.Printf("server: event store append failed: %v", err)
-	}
+	// 7. Broadcast to dashboards.
 	s.hub.BroadcastToDashboard(deviceMsg)
 
 	log.Printf("server: event %s -> state %s (task=%s session=%s risk=%.2f devices=%d)",
@@ -243,18 +248,60 @@ func (s *Server) onDeviceMessage(sessionID string, msg *domain.ClientMessage) {
 
 		// Transition state back to running.
 		s.stateMgr.Transition(msg.TaskID, sessionID, domain.EventTaskRunning)
+		s.relayUserAction(sessionID, msg)
 
 	case domain.ActionContinue:
 		s.stateMgr.Transition(msg.TaskID, sessionID, domain.EventTaskRunning)
+		s.relayUserAction(sessionID, msg)
 
 	case domain.ActionPause:
 		s.stateMgr.ForceSet(msg.TaskID, sessionID, domain.TaskStatePaused)
+		s.relayUserAction(sessionID, msg)
 
 	case domain.ActionViewDetails:
 		// TODO: push a raw evidence payload back to the device.
 		log.Printf("server: view_details requested for task %s by device %s",
 			msg.TaskID, msg.Action.DeviceType)
 	}
+}
+
+func (s *Server) relayUserAction(sessionID string, msg *domain.ClientMessage) {
+	action := msg.Action
+	relay := &domain.UnifiedMessage{
+		ID:        uuid.New().String(),
+		TaskID:    msg.TaskID,
+		SessionID: sessionID,
+		EventType: domain.EventUserAction,
+		Title:     "User action",
+		Body:      string(action.Type),
+		Severity:  domain.SeverityInfo,
+		Timestamp: time.Now(),
+		AgentID:   "middleware-core",
+		Action:    &action,
+	}
+
+	deviceMsg := &domain.DeviceMessage{
+		Direction: "server_to_client",
+		MessageID: uuid.New().String(),
+		SessionID: sessionID,
+		Timestamp: time.Now().UnixMilli(),
+		Event:     relay,
+		Overrides: map[domain.DeviceType]*domain.DeviceOutput{
+			domain.DeviceAgentAdapter: {
+				RenderHint: "agent_action",
+				CardTitle:  "User action",
+				CardBody:   string(action.Type),
+			},
+		},
+	}
+
+	if _, err := s.eventStore.Append(sessionID, deviceMsg); err != nil {
+		log.Printf("server: user action append failed: %v", err)
+	}
+	if err := s.hub.SendToDevice(sessionID, domain.DeviceAgentAdapter, deviceMsg); err != nil {
+		log.Printf("server: user action relay to agent_adapter failed: %v", err)
+	}
+	s.hub.BroadcastToDashboard(deviceMsg)
 }
 
 // ---------- Dashboard handlers ----------

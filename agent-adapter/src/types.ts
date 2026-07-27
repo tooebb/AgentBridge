@@ -6,7 +6,8 @@ export type EventType =
   | 'task_blocked'
   | 'needs_approval'
   | 'task_failed'
-  | 'task_completed';
+  | 'task_completed'
+  | 'user_action';
 
 export type Severity = 'info' | 'warning' | 'critical';
 
@@ -30,6 +31,14 @@ export interface UnifiedMessage {
   timestamp: string; // ISO 8601, matches Go's time.Time JSON encoding
   agent_id: string;
   metadata?: Record<string, unknown>;
+  action?: DeviceAction;
+}
+
+export interface DeviceAction {
+  type: string;
+  device_type: string;
+  timestamp: number;
+  text?: string;
 }
 
 export interface RawEvent {

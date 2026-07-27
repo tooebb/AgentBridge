@@ -28,10 +28,11 @@ type Policy struct {
 // DefaultPolicies returns sensible defaults per device type.
 func DefaultPolicies() map[domain.DeviceType]Policy {
 	return map[domain.DeviceType]Policy{
-		domain.DevicePhone:   {Mode: ModeInstant, MinSeverity: domain.SeverityInfo, AllowActions: true},
-		domain.DeviceWatch:   {Mode: ModeAggregated, AggInterval: 60 * time.Second, MinSeverity: domain.SeverityWarning},
-		domain.DeviceGlass:   {Mode: ModeInstant, MinSeverity: domain.SeverityInfo, AllowActions: true, CoolDown: 10 * time.Second},
-		domain.DeviceEarbuds: {Mode: ModeInstant, MinSeverity: domain.SeverityWarning, AllowActions: false},
+		domain.DevicePhone:        {Mode: ModeInstant, MinSeverity: domain.SeverityInfo, AllowActions: true},
+		domain.DeviceWatch:        {Mode: ModeAggregated, AggInterval: 60 * time.Second, MinSeverity: domain.SeverityWarning},
+		domain.DeviceGlass:        {Mode: ModeInstant, MinSeverity: domain.SeverityInfo, AllowActions: true, CoolDown: 10 * time.Second},
+		domain.DeviceEarbuds:      {Mode: ModeInstant, MinSeverity: domain.SeverityWarning, AllowActions: false},
+		domain.DeviceAgentAdapter: {Mode: ModeQuiet},
 	}
 }
 

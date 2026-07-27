@@ -113,6 +113,13 @@ go run cmd/server/main.go
 # 监听 :8080，输出 "Server starting on :8080"
 ```
 
+可选环境变量：
+
+```bash
+AGENTBRIDGE_ADDR=127.0.0.1:18080              # 覆盖默认监听地址 :8080
+AGENTBRIDGE_EVENT_DB=/tmp/agentbridge.db      # 启用 SQLite 事件持久化和重连补发
+```
+
 ### 2. 启动 Dashboard（可选）
 
 ```bash
@@ -159,13 +166,18 @@ npm run dev
 
 ```bash
 # 查看 Core 健康状态
-curl http://localhost:8080/api/v1/health
+curl http://localhost:8080/health
 
 # 查看所有 session
 curl http://localhost:8080/api/v1/sessions
 
 # 查看某 session 事件历史
 curl http://localhost:8080/api/v1/events/{session_id}
+
+# 验证 SQLite replay + last_acked_seq + 设备动作回传到 agent_adapter
+cd mock-device
+npm install
+GO_BIN=/path/to/go npm run test:e2e
 ```
 
 ## 事件类型 & 状态机

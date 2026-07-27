@@ -48,10 +48,11 @@ const (
 type DeviceType string
 
 const (
-	DevicePhone   DeviceType = "phone"
-	DeviceWatch   DeviceType = "smartwatch"
-	DeviceGlass   DeviceType = "ar_glasses"
-	DeviceEarbuds DeviceType = "earbuds"
+	DevicePhone        DeviceType = "phone"
+	DeviceWatch        DeviceType = "smartwatch"
+	DeviceGlass        DeviceType = "ar_glasses"
+	DeviceEarbuds      DeviceType = "earbuds"
+	DeviceAgentAdapter DeviceType = "agent_adapter"
 )
 
 // ActionType enumerates user actions that can be performed on a device.
@@ -95,6 +96,7 @@ type UnifiedMessage struct {
 	AgentID          string            `json:"agent_id"`
 	RawEvidence      *RawEvidence      `json:"raw_evidence,omitempty"`
 	Metadata         map[string]any    `json:"metadata,omitempty"`
+	Action           *ClientAction     `json:"action,omitempty"`
 }
 
 // DeviceMessage is the final per-device output ready for delivery.
