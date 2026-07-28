@@ -109,3 +109,14 @@ npm run dev
 - 单击、双击、长按的按键广播是否与 `KeyReceiver` 映射一致。
 - TTS 是否只在非 replay 消息播报一次。
 
+## 7. 2026-07-28 本地协议层验证记录
+
+本地 agent 已完成无真机协议层验证，结论是 Phase2 核心后端/协议层无阻断性 bug：
+
+- `middleware-core` Go tests：2/2 packages pass，覆盖 device 和 store。
+- `mock-device` E2E：10/10 pass，覆盖 replay、action relay、SQLite persistence、restart。
+- W3 readiness：13/13 pass，覆盖 `ar_glasses`、`quick_actions`、TTS、reconnect、`device_type`。
+- Mock Glass：8/8 pass，覆盖 6 种事件类型、action round-trip、reconnect replay。
+- Agent Adapter 全链路：`claude-cli` -> Core -> Mock Glass，3 个事件均正确到达，带 `seq` 和 4 设备独立 overrides。
+
+这些结果覆盖了 `ar_glasses` 设备注册、`session_id=default`、审批卡片 `quick_actions` + TTS、approve/reject action 回传、`last_acked_seq` 补发和 `is_replay=true`。仍不能替代真实 Rokid 设备上的 CXR-L 安装、Compose 屏显、按键广播和离线 TTS 验收。

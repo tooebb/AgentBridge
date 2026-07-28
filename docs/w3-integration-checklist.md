@@ -117,6 +117,7 @@ adb logcat -d -t 300
 ## 6. 当前边界
 
 - 本仓库提供 W3 接入协议、模拟验证和联调清单；真实 W3 App 的 SDK 接入、蓝牙链路、系统级 TTS/按键事件绑定仍需要在客户端工程内完成。
+- 2026-07-28 本地 agent 已完成协议层验证：Go tests、E2E、W3 readiness、Mock Glass 和 Agent Adapter -> Core -> Mock Glass 全链路均通过；该结论只代表后端/协议层无阻断性 bug，不替代真实 Rokid 设备验收。
 - `npm run w3:preflight` 能确认当前主机是否具备进入实机联调的条件，但不能替代 W3 SDK/App 真实运行验证。
 - OpenAI-compatible provider 目前是最小文本调用骨架，不覆盖所有模型的 tool calling 和流式差异。
 - 实机验收前应先跑 `npm run test:w3`、`npm run test:e2e`、`middleware-core go test ./...`。
