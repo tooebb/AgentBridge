@@ -7,24 +7,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import com.rokid.cxrswithcxrl.agent.AgentBridgeScreen
+import com.rokid.cxrswithcxrl.agent.AgentCardState
 import com.rokid.cxrswithcxrl.receiver.KeyReceiver
 import com.rokid.cxrswithcxrl.receiver.KeyType
 import com.rokid.cxrswithcxrl.ui.theme.CXRSWithCXRLTheme
@@ -48,6 +37,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
+        viewModel.startAgentBridge(applicationContext)
         setContent {
             CXRSWithCXRLTheme {
                 MainScreen(
@@ -86,40 +76,14 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     val fromClient by viewModel.capsFromClient.collectAsState()
-    val debugStatus by viewModel.debugStatus.collectAsState()
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(color = Color.Black),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        GreenText(text = "[DIAG] $debugStatus")
-        Spacer(modifier = Modifier.padding(vertical = 8.dp))
-        GreenText(text = "[SUB] $fromClient")
-        Spacer(modifier = Modifier.padding(vertical = 12.dp))
-        GreenText(text = "点击按键 → 发送键值到手机")
-    }
-}
-
-@Composable
-fun GreenText(text: String) {
-
-    Text(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        text = text,
-        color = Color(0xFF00AF00),
-        textAlign = TextAlign.Center
-    )
+    val agentCard by viewModel.agentCard.collectAsState()
+    AgentBridgeScreen(card = agentCard, capsFromClient = fromClient)
 }
 
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
     CXRSWithCXRLTheme {
-        MainScreen(viewModel = MainViewModel())
+        AgentBridgeScreen(card = AgentCardState(), capsFromClient = "subscribe: preview")
     }
 }

@@ -468,7 +468,7 @@ Phone ← CXR-L SDK → Glass（仅生命周期：appUploadAndInstall + appStart
 | 阶段 | 目标 | 状态 |
 |------|------|------|
 | **Phase 1** (PC only) | Core + Agent Adapter + Dashboard + Mock Device + SQLite/W3 协议 | ✅ 已完成 (2026-07-26) |
-| **Phase 2** (WiFi 联调) | 眼镜端 WebSocket 客户端 + 卡片渲染 + TTS + 按键审批 + 真机验收 | 🔄 开发中 (2026-07-27) |
+| **Phase 2** (WiFi 联调) | 眼镜端 WebSocket 客户端 + 卡片渲染 + TTS + 按键审批 + 真机验收 | 🔄 开发中 (2026-07-28：眼镜端 MVP 代码已落地，待 Android 环境编译和真机验收) |
 | **Phase 3** (三端集成) | 手机/手表/耳机完整客户端 + 生产化安全/存储 + 跨实例部署 | 📋 规划中 |
 
 ---
@@ -523,6 +523,9 @@ agentbridge/
 │
 ├── dashboard/                   # React/TS 监控面板
 ├── mock-device/                 # phone/watch/glass/earbuds 模拟客户端和联调脚本
+├── rokid-sdk/                   # Rokid CXR-L/CXR-S 示例工程源码
+│   ├── CXRLSample/              # 手机端 CXR-L 控制面样例
+│   └── cxrssample/cxrswithcxrl/ # 眼镜端 CustomApp + AgentBridge MVP 客户端
 └── docs/
     ├── architecture.md          # 本文档
     ├── requirements.md          # 产品需求
@@ -548,6 +551,6 @@ agentbridge/
 | EventStore 可靠性 | 已实现 | 内存 ring buffer + 可选 SQLite，支持 `seq`、`last_acked_seq`、replay |
 | Agent provider | 已实现 | `claude-api`、`openai-compatible`、`generic-cli`、`claude-cli` |
 | Mock Device / W3 readiness | 已实现 | 状态层、e2e replay/action、W3 readiness 和 preflight |
-| 眼镜端客户端 (cxrswithcxrl) | 开发中 | AgentBridgeProtocol + AgentBridgeClient + CardRenderer + AgentActionHandler，详见 Phase 2 计划 |
+| 眼镜端客户端 (cxrswithcxrl) | 开发中 | `rokid-sdk/cxrssample/cxrswithcxrl/app/src/main/java/com/rokid/cxrswithcxrl/agent/` 已包含 AgentBridgeProtocol + AgentBridgeClient + CardRenderer + AgentActionHandler；默认连接 `ws://192.168.1.100:8080/ws/default?device_type=ar_glasses`，现场需改为 Core 局域网 IP |
 | 手机端客户端 (CXRLSample) | 最小化 | CXR 生命周期已可用；Core 地址配置预留，详见 Phase 2 计划 |
 | 生产化安全/存储 | 待实现 | API key/JWT、设备授权、PostgreSQL/Redis、审批审计持久化 |

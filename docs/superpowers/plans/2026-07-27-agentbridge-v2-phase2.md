@@ -27,7 +27,7 @@
 
 ### 1. Rokid 工程与当前仓库边界
 
-当前 AgentBridge 仓库只包含 Rokid SDK 文档摘要与联调计划，不包含可直接编译的两个 Rokid 示例工程源码：
+当前 AgentBridge 仓库已补入 Rokid 示例工程源码；早期计划中“仓库不包含可直接编译的两个 Rokid 示例工程源码”的判断已过期。当前仍保留下面的 SDK 文档摘要作为背景：
 
 - `docs/CXR-L SDK.md`：手机端 CXR-L SDK 文档摘要，覆盖 RenewCXRLSample、CXR-L 鉴权、CustomApp 安装/启动、音频/拍照/自定义指令等。
 - `docs/CXR-S.md`：眼镜端 CXR-S SDK 文档摘要，覆盖 `CXRServiceBridge`、消息订阅/回复、按键广播、眼镜端开发环境等。
@@ -38,8 +38,10 @@
 | 落点 | 内容 | 是否在当前 AgentBridge 仓库 |
 | ---- | ---- | --------------------------- |
 | AgentBridge | 协议测试、现场手册、Core/Adapter 侧必要兼容修正 | 是 |
-| `cxrswithcxrl` | 眼镜端 WS 客户端、卡片、TTS、按键动作 | 否 |
-| `CXRLSample` / 手机端工程 | CXR 鉴权、CustomApp 安装/启动、Core 地址配置入口 | 否 |
+| `rokid-sdk/cxrssample/cxrswithcxrl` | 眼镜端 WS 客户端、卡片、TTS、按键动作 | 是 |
+| `rokid-sdk/CXRLSample` / 手机端工程 | CXR 鉴权、CustomApp 安装/启动、Core 地址配置入口 | 是 |
+
+2026-07-28 小阶段进展：眼镜端 MVP 代码已在 `cxrswithcxrl` 工程内落地，包括 OkHttp/Gson 依赖、`INTERNET`/cleartext 配置、协议 data class、WS 客户端、ack/replay 去重、TTS、按键动作路由和 Compose 卡片。当前开发环境因系统 JDK `java.security` 配置缺失无法启动 Gradle wrapper，尚未完成 Android 编译验收。
 
 ### 2. 数据面与控制面分工
 

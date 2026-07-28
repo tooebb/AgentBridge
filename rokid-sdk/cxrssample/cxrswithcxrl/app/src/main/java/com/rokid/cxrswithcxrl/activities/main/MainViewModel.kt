@@ -1,10 +1,15 @@
 package com.rokid.cxrswithcxrl.activities.main
 
+import android.content.Context
 import android.util.Base64
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.rokid.cxr.CXRServiceBridge
 import com.rokid.cxr.Caps
+import com.rokid.cxrswithcxrl.agent.AgentActionHandler
+import com.rokid.cxrswithcxrl.agent.AgentBridgeClient
+import com.rokid.cxrswithcxrl.agent.AgentCardState
+import com.rokid.cxrswithcxrl.agent.DeviceMessage
 import com.rokid.cxrswithcxrl.receiver.KeyEventListener
 import com.rokid.cxrswithcxrl.receiver.KeyReceiver
 import com.rokid.cxrswithcxrl.receiver.KeyType
@@ -22,7 +27,12 @@ class MainViewModel: ViewModel() {
     private val _debugStatus = MutableStateFlow("init")
     val debugStatus = _debugStatus.asStateFlow()
 
+    private val _agentCard = MutableStateFlow(AgentCardState())
+    val agentCard = _agentCard.asStateFlow()
+
     private val cxrBridge = CXRServiceBridge()
+    private var agentClient: AgentBridgeClient? = null
+    private var actionHandler: AgentActionHandler? = null
 
     private val cmdKey = "rk_custom_key"
     private val clientKey = "rk_custom_client"
@@ -30,6 +40,9 @@ class MainViewModel: ViewModel() {
     private val keyEventListener = object : KeyEventListener {
         override fun onKeyEvent(keyType: KeyType) {
             sendMessage("Listener: key action = ${keyType.name}")
+            actionHandler?.onKey(keyType)?.let {
+                _agentCard.value = it
+            }
         }
     }
 
@@ -80,6 +93,41 @@ class MainViewModel: ViewModel() {
         _debugStatus.value = "init done, bridge set"
     }
 
+    fun startAgentBridge(context: Context) {
+        if (agentClient != null) {
+            return
+        }
+        val appContext = context.applicationContext
+        val handler = AgentActionHandler(appContext) { taskId, actionType ->
+            agentClient?.sendAction(taskId, actionType) == true
+        }
+        actionHandler = handler
+        agentClient = AgentBridgeClient(
+            context = appContext,
+            listener = object : AgentBridgeClient.Listener {
+                override fun onConnectionChanged(label: String) {
+                    _agentCard.value = handler.onConnectionChanged(label)
+                    _debugStatus.value = label
+                }
+
+                override fun onMessage(message: DeviceMessage, duplicate: Boolean) {
+                    _agentCard.value = handler.reduce(message, duplicate)
+                    _debugStatus.value = if (duplicate) {
+                        "duplicate ignored"
+                    } else {
+                        "event=${message.event?.eventType ?: "unknown"} seq=${message.seq}"
+                    }
+                }
+
+                override fun onError(label: String, throwable: Throwable?) {
+                    Log.w("AgentBridge", label, throwable)
+                    _debugStatus.value = label
+                    _agentCard.value = handler.onConnectionChanged(label)
+                }
+            }
+        ).also { it.connect() }
+    }
+
     fun sendMessage(str: String){
         val result = cxrBridge.sendMessage(cmdKey, Caps().apply {
             write("message")
@@ -111,5 +159,11 @@ class MainViewModel: ViewModel() {
         }
         strBuilder.append("}")
         return strBuilder.toString()
+    }
+
+    override fun onCleared() {
+        agentClient?.disconnect()
+        actionHandler?.close()
+        super.onCleared()
     }
 }

@@ -8,6 +8,7 @@
 - Core 监听地址对眼镜端可访问：本机调试可用 `AGENTBRIDGE_ADDR=0.0.0.0:8080`。
 - Agent Adapter 已连接同一个 session，并优先使用可用 provider；没有 `ANTHROPIC_API_KEY` 时确认 `generic-cli`、OpenAI-compatible 或 `claude-cli` fallback 可用。
 - W3 端能访问：`ws://<core-host>/ws/<session_id>?device_type=ar_glasses&last_acked_seq=<seq>`。
+- 眼镜端样例工程使用 `rokid-sdk/cxrssample/cxrswithcxrl/app/src/main/java/com/rokid/cxrswithcxrl/agent/AgentBridgeClient.kt` 中的 `DEFAULT_SERVER_URL` 和 `DEFAULT_SESSION_ID`。开发阶段默认值是 `ws://192.168.1.100:8080` / `default`，现场联调前必须改为 Core 机器的局域网 IP。
 
 ## 2. 自动前置检查
 
@@ -97,6 +98,11 @@ npm run dev
 # 本地模拟 W3
 cd mock-device
 SERVER=http://127.0.0.1:8080 npm run glass
+
+# 眼镜端 APK
+cd rokid-sdk/cxrssample/cxrswithcxrl
+chmod +x gradlew
+./gradlew :app:assembleDebug
 ```
 
 真实设备联调需要现场补充以下输出，便于继续定位：
@@ -114,3 +120,4 @@ adb logcat -d -t 300
 - `npm run w3:preflight` 能确认当前主机是否具备进入实机联调的条件，但不能替代 W3 SDK/App 真实运行验证。
 - OpenAI-compatible provider 目前是最小文本调用骨架，不覆盖所有模型的 tool calling 和流式差异。
 - 实机验收前应先跑 `npm run test:w3`、`npm run test:e2e`、`middleware-core go test ./...`。
+- 2026-07-28 当前开发环境的 Android 编译被系统 JDK `java.security` 配置阻断，需在 Android Studio 或可用 JDK/Android SDK 环境中执行 `./gradlew :app:assembleDebug` 后再进入真机验收。
