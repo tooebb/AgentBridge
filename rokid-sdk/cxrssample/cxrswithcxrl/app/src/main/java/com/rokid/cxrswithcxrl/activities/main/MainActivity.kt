@@ -2,8 +2,6 @@ package com.rokid.cxrswithcxrl.activities.main
 
 import android.content.IntentFilter
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import android.view.KeyEvent
@@ -19,6 +17,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.ViewModelProvider
 import com.rokid.cxrswithcxrl.agent.AgentBridgeScreen
 import com.rokid.cxrswithcxrl.agent.AgentCardState
+import com.rokid.cxrswithcxrl.agent.GestureHandler
 import com.rokid.cxrswithcxrl.receiver.KeyReceiver
 import com.rokid.cxrswithcxrl.receiver.KeyType
 import com.rokid.cxrswithcxrl.ui.theme.CXRSWithCXRLTheme
@@ -36,16 +35,13 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var viewModel: MainViewModel
     private lateinit var wakeLock: PowerManager.WakeLock
-    private val clickHandler = Handler(Looper.getMainLooper())
-    private var pendingSecondClick: Runnable? = null
-    private var gestureLockUntil = 0L
-
-
+    private val gestureHandler = GestureHandler { actionType ->
+        viewModel.onGesture(actionType)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        // Also set on decor view for glasses that may override window flags
         window.decorView.keepScreenOn = true
         enableEdgeToEdge()
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
@@ -76,7 +72,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        pendingSecondClick?.let { clickHandler.removeCallbacks(it) }
+        gestureHandler.destroy()
         unregisterReceiver(viewModel.keyReceiver)
         if (wakeLock.isHeld) {
             wakeLock.release()
@@ -87,49 +83,14 @@ class MainActivity : ComponentActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         Log.d("INPUT", "onKeyDown: keyCode=$keyCode action=${event?.action}")
         viewModel.showInputDebug("keyDown=$keyCode")
-        when (keyCode) {
-            83 -> {
-                if (System.currentTimeMillis() < gestureLockUntil) {
-                    return true
-                }
-                val pending = pendingSecondClick
-                if (pending != null) {
-                    clickHandler.removeCallbacks(pending)
-                    pendingSecondClick = null
-                    viewModel.onGesture("reject")
-                } else {
-                    val runnable = Runnable {
-                        pendingSecondClick = null
-                        viewModel.onGesture("approve")
-                    }
-                    pendingSecondClick = runnable
-                    clickHandler.postDelayed(runnable, 500L)
-                }
-                return true
-            }
-            19, 20 -> {
-                pendingSecondClick?.let { clickHandler.removeCallbacks(it) }
-                pendingSecondClick = null
-                gestureLockUntil = System.currentTimeMillis() + 500L
-                viewModel.onGesture("view_details")
-                return true
-            }
-            4 -> { viewModel.onGesture("reject"); return true }
-        }
+        if (gestureHandler.onKeyDown(keyCode)) return true
         return super.onKeyDown(keyCode, event)
     }
+
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
         Log.d("INPUT", "onKeyUp: keyCode=$keyCode action=${event?.action}")
         viewModel.showInputDebug("keyUp=$keyCode")
-        when (keyCode) {
-            19, 20 -> {
-                pendingSecondClick?.let { clickHandler.removeCallbacks(it) }
-                pendingSecondClick = null
-                gestureLockUntil = System.currentTimeMillis() + 500L
-                viewModel.onGesture("view_details")
-                return true
-            }
-        }
+        if (gestureHandler.onKeyUp(keyCode)) return true
         return super.onKeyUp(keyCode, event)
     }
 

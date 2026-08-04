@@ -167,7 +167,7 @@ class AgentBridgeClient(
 
     companion object {
         private const val TAG = "AgentBridgeClient"
-        const val DEFAULT_SERVER_URL = "ws://198.18.0.1:19090"
+        const val DEFAULT_SERVER_URL = "ws://127.0.0.1:19090"
         const val DEFAULT_SESSION_ID = "default"
         private const val KEY_LAST_ACKED_SEQ = "last_acked_seq"
         private const val MAX_SEEN = 200
