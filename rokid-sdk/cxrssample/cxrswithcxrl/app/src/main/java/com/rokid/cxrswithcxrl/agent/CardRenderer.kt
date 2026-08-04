@@ -23,7 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun AgentBridgeScreen(card: AgentCardState, capsFromClient: String) {
+fun AgentBridgeScreen(card: AgentCardState, capsFromClient: String, debugStatus: String = "") {
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -37,6 +37,16 @@ fun AgentBridgeScreen(card: AgentCardState, capsFromClient: String) {
             verticalArrangement = Arrangement.Center
         ) {
             ConnectionHeader(card)
+            if (debugStatus.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = debugStatus,
+                    color = Color(0xFFF4B400),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             AgentCard(card)
             Spacer(modifier = Modifier.height(12.dp))

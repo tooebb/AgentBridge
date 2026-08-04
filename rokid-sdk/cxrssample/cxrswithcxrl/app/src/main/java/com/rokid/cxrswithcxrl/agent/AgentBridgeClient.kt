@@ -11,13 +11,17 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.TimeUnit
+import javax.net.SocketFactory
 
 class AgentBridgeClient(
     context: Context,
     private val serverUrl: String = DEFAULT_SERVER_URL,
     private val sessionId: String = DEFAULT_SESSION_ID,
-    private val listener: Listener
+    private val listener: Listener,
+    bindIp: String? = null
 ) {
     interface Listener {
         fun onConnectionChanged(label: String)
@@ -32,6 +36,12 @@ class AgentBridgeClient(
     private val httpClient = OkHttpClient.Builder()
         .pingInterval(30, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
+        .apply {
+            if (bindIp != null) {
+                val addr = InetSocketAddress(bindIp, 0)
+                socketFactory(BindSocketFactory(addr))
+            }
+        }
         .build()
 
     private var webSocket: WebSocket? = null
@@ -40,7 +50,8 @@ class AgentBridgeClient(
     private val seenSeqs = linkedSetOf<Long>()
     private val seenMessageIds = linkedSetOf<String>()
 
-    var lastAckedSeq: Long = prefs.getLong(KEY_LAST_ACKED_SEQ, 0L)
+    // Start from 0 each app launch to avoid seq mismatch when Core restarts.
+    var lastAckedSeq: Long = 0L
         private set
 
     fun connect() {
@@ -127,7 +138,6 @@ class AgentBridgeClient(
                 seenSeqs.remove(seenSeqs.first())
             }
             lastAckedSeq = seq
-            prefs.edit().putLong(KEY_LAST_ACKED_SEQ, lastAckedSeq).apply()
             return false
         }
 
@@ -157,9 +167,26 @@ class AgentBridgeClient(
 
     companion object {
         private const val TAG = "AgentBridgeClient"
-        const val DEFAULT_SERVER_URL = "ws://192.168.1.100:8080"
+        const val DEFAULT_SERVER_URL = "ws://198.18.0.1:19090"
         const val DEFAULT_SESSION_ID = "default"
         private const val KEY_LAST_ACKED_SEQ = "last_acked_seq"
         private const val MAX_SEEN = 200
     }
+}
+
+private class BindSocketFactory(
+    private val bindAddr: InetSocketAddress
+) : SocketFactory() {
+    override fun createSocket(): Socket = Socket().apply { bind(bindAddr) }
+    override fun createSocket(host: String, port: Int): Socket =
+        Socket().apply { bind(bindAddr); connect(InetSocketAddress(host, port)) }
+    override fun createSocket(host: String, port: Int, localHost: java.net.InetAddress, localPort: Int): Socket =
+        Socket().apply { bind(InetSocketAddress(localHost, localPort)); connect(InetSocketAddress(host, port)) }
+    override fun createSocket(host: java.net.InetAddress, port: Int): Socket =
+        Socket().apply { bind(bindAddr); connect(InetSocketAddress(host, port)) }
+    override fun createSocket(
+        address: java.net.InetAddress, port: Int,
+        localAddress: java.net.InetAddress, localPort: Int
+    ): Socket =
+        Socket().apply { bind(InetSocketAddress(localAddress, localPort)); connect(InetSocketAddress(address, port)) }
 }

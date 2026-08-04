@@ -85,6 +85,10 @@ class AgentActionHandler(
             KeyType.CLICK -> pickAction(0) ?: "continue"
             KeyType.DOUBLE_CLICK -> pickAction(1) ?: "pause"
             KeyType.LONG_PRESS -> "view_details"
+            KeyType.ACTION_TWO_FINGER_SINGLE_TAP -> pickAction(0) ?: "continue"
+            KeyType.ACTION_TWO_FINGER_DOUBLE_TAP -> pickAction(1) ?: "pause"
+            KeyType.ACTION_TWO_FINGER_SWIPE_FORWARD -> "continue"
+            KeyType.ACTION_TWO_FINGER_SWIPE_BACK -> "pause"
             else -> null
         }
         if (action == null) {
@@ -97,6 +101,17 @@ class AgentActionHandler(
                 "sent action=$action, lastAckedSeq=${currentState.lastAckedSeq}"
             } else {
                 "action=$action not sent"
+            }
+        )
+        return currentState
+    }
+
+    fun onGestureResult(actionType: String, sent: Boolean): AgentCardState {
+        currentState = currentState.copy(
+            statusLine = if (sent) {
+                "sent action=$actionType, lastAckedSeq=${currentState.lastAckedSeq}"
+            } else {
+                "action=$actionType not sent"
             }
         )
         return currentState

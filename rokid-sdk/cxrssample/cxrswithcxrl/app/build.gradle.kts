@@ -15,8 +15,8 @@ android {
         applicationId = "com.rokid.cxrswithcxrl"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 20
+        versionName = "3.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
