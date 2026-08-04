@@ -34,33 +34,59 @@ cd mock-device && npm install && npm run phone
 - `docs/` — 架构设计、需求、W3 联调清单和历史设计/计划文档
 - 当前目录是 Git 仓库；改动前后用 `git status --short --branch` 确认工作区状态
 
-## 当前状态 (2026-07-27)
+## 当前状态 (2026-08-04)
 
-Middleware Core / Agent Adapter / Web Dashboard / Mock Device Client **已有可运行实现**；真实 Phone / Glass 客户端仍待在客户端工程内完成。
+### Phase 1（PC only）— ✅ 全部完成
 
-### CXR-L SDK 联调（设备：华为 NOP_AN00 + Rokid RG-glasses）
+Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议对齐。
 
-| 功能 | 状态 | 说明 |
+### Phase 2（WiFi 联调 / 真机）— 🔄 核心闭环已跑通
+
+**眼镜端（cxrswithcxrl，`com.rokid.cxrswithcxrl`）**：
+| 组件 | 文件 | 状态 |
 |------|------|------|
-| CustomView | ✅ 通过 | 手机 JSON 布局 → 眼镜渲染 |
-| CustomApp 安装 | ✅ 通过 | `appUploadAndInstall` 成功（之前 Meizu 失败是 WiFi 热点冲突，非固件限制） |
-| CustomApp 启动 | ✅ 通过 | `appStart` → `onOpenAppResult: true` |
-| 眼镜→手机 (sendMessage) | ✅ 通过 | 按键事件回传正常 |
-| 手机→眼镜 (sendCustomCmd) | ❌ 放弃 | 根因：`cxrservice` 将 `sendCustomCmd` 路由为 `ShortMessage` 类型（`notifyType:UNKNOWN`），不被转发到 CustomApp 的 `subscribe` 回调。眼镜→手机的 `sendMessage` 走 `Notify` 类型正常。两方向使用不同协议消息类型，属 SDK 底层实现问题，闭源无法修复。 |
+| 协议数据类 | `agent/AgentBridgeProtocol.kt` | ✅ |
+| WS 客户端 + 重连 | `agent/AgentBridgeClient.kt` | ✅ |
+| 卡片状态 + TTS | `agent/AgentActionHandler.kt` | TTS 代码已写，待真机验证 |
+| Compose 卡片 UI | `agent/CardRenderer.kt` | ✅ |
+| 键盘手势处理 | `activities/main/MainActivity.kt` | ✅ 真机验证通过 |
+| 集成层 | `activities/main/MainViewModel.kt` | ✅ |
 
-### 眼镜数据通道方案
+**真机验证结果（2026-08-04，ADB 隧道直连）**：
 
-**方案 A — CXR Caps 全双工**（官方推荐）→ **已放弃**
-- 原因：`sendCustomCmd` (ShortMessage) 与 `sendMessage` (Notify) 走不同协议路径，前者不被路由到应用层，属 SDK 闭源不可修复
-- CXR 保留用途：`appUploadAndInstall` / `appStart`（已验证 ✅）
+| # | 场景 | 结果 |
+|---|------|------|
+| 1 | WebSocket 连接 | ✅ Core 收到 `device_type=ar_glasses` |
+| 2 | 卡片显示 | ✅ status/actionable/alert 卡片正常渲染 |
+| 3 | 单击 → approve | ✅ 500ms 消抖，Core 收到 `action.type=approve` |
+| 4 | 双击 → reject | ✅ 两次 keyCode=83 在 500ms 内视为双击 |
+| 5 | 滑动 → view_details | ✅ 向镜腿=19 / 向镜片=20，Core 记录日志 |
+| 6 | 断连重连 | ✅ 指数退避重连 + is_replay 去重 |
 
-**方案 B — WebSocket 直连 + CXR 仅管生命周期**（当前方向）
-- CXR 负责：应用安装与启动（已确认可用）
-- WebSocket 负责：Core ↔ 眼镜所有数据通信（审批、状态、通知、重连补发）
-- 协议：标准 JSON，与 Dashboard/Mock Device 同一套；设备连接 `ws://<PC-IP>:8080/ws/{session_id}?device_type=ar_glasses`
-- 状态：Core Device Dispatcher 已适配眼镜（6 个公开任务事件 × 独立渲染），`mock-device` 已覆盖 ack/replay/动作回传；真实眼镜端 OkHttp WS 客户端待实现
+**手机端（CXRLSample）**：仅做 CXR 生命周期（install + start），不参与数据面。
 
-存储 / 认证状态：
-- 事件存储默认使用内存环形缓冲；设置 `AGENTBRIDGE_EVENT_DB=/path/to/events.db` 后启用 SQLite 持久化、`last_acked_seq` 和重连补发。
-- PostgreSQL/Redis 仍是后续生产化规划，不是当前实现。
-- 认证/安全仍待开发。
+**待完成**：
+- TTS 真机验证（代码已写，被未知音频问题搁置）
+- 语音审批
+- 手机端 AgentBridgeService（网络中枢 fallback）
+- 代码清理：删 WiFi 死代码、抽 GestureHandler、补主动 ack
+
+### CXR-L SDK 联调
+
+| 功能 | 状态 |
+|------|------|
+| CustomView | ✅ |
+| CustomApp 安装 | ✅ |
+| CustomApp 启动 | ✅ |
+| 眼镜→手机 (sendMessage) | ✅ |
+| 手机→眼镜 (sendCustomCmd) | ❌ 放弃（SDK 闭源协议路由问题） |
+
+### 数据通道：WebSocket 直连，CXR 仅管生命周期（不再改动）
+
+存储：默认内存环形缓冲，可选 SQLite（`AGENTBRIDGE_EVENT_DB`）。认证/安全仍待开发。
+
+### 仓库
+
+- Fork: `https://github.com/tooebb/AgentBridge` (origin)
+- Upstream: `https://github.com/GaeainCloud/AgentBridge`
+- 当前分支: `agent/recovered`
