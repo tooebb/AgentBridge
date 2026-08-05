@@ -8,7 +8,7 @@
 - Core 监听地址对眼镜端可访问：本机调试可用 `AGENTBRIDGE_ADDR=0.0.0.0:8080`。
 - Agent Adapter 已连接同一个 session，并优先使用可用 provider；没有 `ANTHROPIC_API_KEY` 时确认 `generic-cli`、OpenAI-compatible 或 `claude-cli` fallback 可用。
 - W3 端能访问：`ws://<core-host>/ws/<session_id>?device_type=ar_glasses&last_acked_seq=<seq>`。
-- 眼镜端样例工程使用 `rokid-sdk/cxrssample/cxrswithcxrl/app/src/main/java/com/rokid/cxrswithcxrl/agent/AgentBridgeClient.kt` 中的 `DEFAULT_SERVER_URL` 和 `DEFAULT_SESSION_ID`。开发阶段默认值是 `ws://192.168.1.100:8080` / `default`，现场联调前必须改为 Core 机器的局域网 IP。
+- 眼镜端样例工程使用 `rokid-sdk/cxrssample/cxrswithcxrl/app/src/main/java/com/rokid/cxrswithcxrl/agent/AgentBridgeClient.kt` 中的 `DEFAULT_SERVER_URL` 和 `DEFAULT_SESSION_ID`。开发阶段默认值为 `ws://127.0.0.1:19090`（ADB reverse tunnel），部署阶段改为 Core 机器的局域网 IP (`ws://<PC-IP>:8080`)。
 
 ## 2. 自动前置检查
 

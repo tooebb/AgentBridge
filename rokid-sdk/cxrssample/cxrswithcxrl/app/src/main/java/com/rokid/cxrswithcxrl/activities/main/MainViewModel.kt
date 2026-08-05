@@ -42,9 +42,7 @@ class MainViewModel: ViewModel() {
     private val cmdKey = "rk_custom_key"
     private val clientKey = "rk_custom_client"
     private var netInfo = "net:?"
-    private var hotspotInfo = ""
-    private var hotspotReservation: android.net.wifi.WifiManager.LocalOnlyHotspotReservation? = null
-    private fun debugText(msg: String) = "$hotspotInfo$msg | $netInfo"
+    private fun debugText(msg: String) = "$msg | $netInfo"
 
     private val keyEventListener = object : KeyEventListener {
         override fun onKeyEvent(keyType: KeyType) {
@@ -170,7 +168,6 @@ class MainViewModel: ViewModel() {
         // Skip all WiFi logic — glasses have no station-mode WiFi, only AP-mode
         val adbUrl = "ws://127.0.0.1:19090"
         netInfo = "$netInfo | ADB reverse mode"
-        hotspotInfo = "ADB: 127.0.0.1:19090 | "
         _debugStatus.value = debugText("adb tunnel")
         // Quick TCP probe then connect
         Thread {
@@ -187,43 +184,6 @@ class MainViewModel: ViewModel() {
             _debugStatus.value = debugText("tcp done")
             createClient(appContext, handler, adbUrl, null)
         }.start()
-    }
-
-    // Returns ALL candidate IPs on hotspot interfaces, with 198.18.x.x preferred
-    // (the actual DHCP subnet), then the rest sorted for deterministic behavior.
-    private fun hotspotInterfaceIps(): List<String> {
-        return try {
-            val candidates = mutableListOf<String>()
-            val ifaces = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
-            for (ni in ifaces) {
-                if (ni.isLoopback || !ni.isUp) continue
-                for (addr in ni.inetAddresses) {
-                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
-                        val ip = addr.hostAddress ?: continue
-                        if (ip.startsWith("192.168.") || ip.startsWith("198.18.") || ip.startsWith("10.")) {
-                            Log.d("WIFI", "hotspotInterfaceIp: ${ni.name} -> $ip")
-                            candidates += ip
-                        }
-                    }
-                }
-            }
-            // Prefer 198.18.x.x (actual hotspot DHCP subnet on RG-glasses)
-            candidates.sortedByDescending { it.startsWith("198.18.") }
-        } catch (e: Exception) {
-            Log.w("WIFI", "hotspotInterfaceIps failed", e)
-            emptyList()
-        }
-    }
-
-    private fun computePcUrl(hotIp: String): String {
-        val parts = hotIp.split(".")
-        if (parts.size != 4) return AgentBridgeClient.DEFAULT_SERVER_URL
-        val lastOctet = parts[3].toIntOrNull() ?: return AgentBridgeClient.DEFAULT_SERVER_URL
-        // /30 subnet (255.255.255.252): only .1 and .2 available.
-        // If glasses are .2 (gateway), PC must be .1. Otherwise assume PC is .2.
-        val pcOctet = if (lastOctet == 2) 1 else 2
-        val pcIp = "${parts[0]}.${parts[1]}.${parts[2]}.$pcOctet"
-        return "ws://$pcIp:19090"
     }
 
     private fun createClient(context: Context, handler: AgentActionHandler, serverUrl: String, bindIp: String? = null) {
@@ -327,7 +287,6 @@ class MainViewModel: ViewModel() {
     }
 
     override fun onCleared() {
-        hotspotReservation?.close()
         agentClient?.disconnect()
         actionHandler?.close()
         super.onCleared()

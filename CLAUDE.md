@@ -69,7 +69,7 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - TTS 真机验证（代码已写，被未知音频问题搁置）
 - 语音审批
 - 手机端 AgentBridgeService（网络中枢 fallback）
-- 代码清理：删 WiFi 死代码、抽 GestureHandler、补主动 ack
+- 代码清理：删 WiFi 死代码 ✅、抽 GestureHandler ✅、补主动 ack
 
 ### CXR-L SDK 联调
 

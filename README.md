@@ -67,7 +67,7 @@ AI Agent (Claude Code)
 | **Agent Adapter** | TypeScript (Node) | child_process, ws | Stdio pipe, WSS |
 | **Web Dashboard** | React 18 + TypeScript | Vite | WSS, REST |
 | **Phone App** (planned) | Kotlin | CXR-L SDK (client-l:1.0.4) | WSS |
-| **Glass App** (planned) | Kotlin | CXR-S SDK + OkHttp WS | WSS |
+| **Glass App** | Kotlin | CXR-S SDK + OkHttp WS + Jetpack Compose | WSS |
 
 ## 项目结构
 
@@ -199,22 +199,35 @@ npm run test:e2e
 
 ### Rokid Glass 客户端开发构建
 
-眼镜端最小客户端位于 `rokid-sdk/cxrssample/cxrswithcxrl`，当前实现包括：
+眼镜端最小客户端位于 `rokid-sdk/cxrssample/cxrswithcxrl`，已完成真机验证（2026-08-04），包括：
 
 - `agent/AgentBridgeProtocol.kt`：对齐 Core JSON 字段的 Kotlin data class。
-- `agent/AgentBridgeClient.kt`：OkHttp WebSocket、`last_acked_seq` 持久化、去重和 2s/4s/8s/30s 重连。
-- `agent/AgentActionHandler.kt`：卡片状态、TTS 播报和按键动作路由。
+- `agent/AgentBridgeClient.kt`：OkHttp WebSocket、`last_acked_seq` 持久化、去重和 2s/4s/8s/30s 指数退避重连。
+- `agent/AgentActionHandler.kt`：卡片状态 reduce、TTS 播报和按键动作路由。
+- `agent/GestureHandler.kt`：单击/双击消抖 (500ms)、滑动锁 (500ms)、按键映射。
 - `agent/CardRenderer.kt`：Compose 状态卡片、审批卡片和调试状态行。
-- `activities/main/MainViewModel.kt` / `MainActivity.kt`：启动 WS 客户端并接入现有按键广播。
+- `activities/main/MainViewModel.kt` / `MainActivity.kt`：WS 生命周期、ADB TCP probe、CXR bridge。
 
-开发阶段 Core 地址硬编码在 `AgentBridgeClient.DEFAULT_SERVER_URL`：
+**连接模式：**
 
+开发阶段使用 ADB reverse tunnel，眼镜端通过 `ws://127.0.0.1:19090` 直连 PC Core：
+```bash
+# PC 端建立隧道（手机已通过 USB 连接）
+adb reverse tcp:19090 tcp:8080
+```
+
+眼镜端 `AgentBridgeClient.DEFAULT_SERVER_URL` 默认值：
 ```kotlin
-const val DEFAULT_SERVER_URL = "ws://192.168.1.100:8080"
+const val DEFAULT_SERVER_URL = "ws://127.0.0.1:19090"
 const val DEFAULT_SESSION_ID = "default"
 ```
 
-现场联调前需要把 `192.168.1.100` 改成 Core 所在电脑的局域网 IP，并确保 Core 使用 `AGENTBRIDGE_ADDR=0.0.0.0:8080` 启动。Android debug 包构建命令：
+现场部署时改为 Core 所在电脑的局域网 IP 和端口：
+```kotlin
+const val DEFAULT_SERVER_URL = "ws://192.168.1.100:8080"
+```
+
+Android debug 包构建命令：
 
 ```bash
 cd rokid-sdk/cxrssample/cxrswithcxrl
@@ -333,7 +346,7 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 | Web Dashboard | 已实现 | session 列表、历史事件、实时事件流、事件类型展示 |
 | Mock Device Client | 已实现 | phone/watch/glass/earbuds 四端模拟；ack、replay、approve/reject/continue/pause/view_details 回传 |
 | W3 模拟联调 | 已实现 | `npm run test:w3` 和 `npm run w3:preflight` 覆盖 W3 协议 readiness |
-| Glass App (真实客户端) | 开发中 | 眼镜端 OkHttp WS 客户端、TTS、卡片渲染、按键回传已落在 `rokid-sdk/cxrssample/cxrswithcxrl`；待 Android 环境编译和真机验收 |
+| Glass App (真实客户端) | 核心闭环已验证 | 6 场景真机验收通过（WS 连接、卡片显示、单击/双击/滑动、断连重连）；TTS 代码已写待真机验证；语音审批待开发 |
 | Phone App (真实客户端) | 待开发 | CXR-L SDK 仅用于 `appUploadAndInstall` / `appStart` 生命周期管理 |
 | 认证/安全 | 待开发 | 当前未实现 API key/JWT/设备授权 |
 
@@ -369,8 +382,9 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 - CXR 负责：应用安装与启动（已确认可用）
 - WebSocket 负责：Core ↔ 眼镜所有数据通信
 - 协议：标准 JSON，与 Dashboard / Mock Device 同一套
-- 眼镜端：OkHttp WS 客户端连接 `ws://<PC-IP>:8080/ws/{sessionID}?device_type=ar_glasses`
-- 本仓库当前完成 Core 协议、mock-device 模拟、联调清单和眼镜端 MVP 客户端代码；真实设备编译安装与现场验收仍待执行。
+- 开发阶段：ADB reverse tunnel (`ws://127.0.0.1:19090` → PC `:8080`)
+- 部署阶段：眼镜直连 Core LAN IP (`ws://<PC-IP>:8080/ws/{sessionID}?device_type=ar_glasses`)
+- 2026-08-04 真机验证：6 场景（连接/卡片/单击/双击/滑动/重连）全部通过
 
 ## 设备通知策略
 
