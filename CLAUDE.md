@@ -65,11 +65,21 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 
 **手机端（CXRLSample）**：仅做 CXR 生命周期（install + start），不参与数据面。
 
+**2026-08-05 新增**：
+
+| # | 场景 | 结果 |
+|---|------|------|
+| 7 | 卡片保护 | ✅ actionable_card 不被 task_running 覆盖 |
+| 8 | E2E relay 验证 | ✅ Core→眼镜→Core→Agent Adapter→ccswitch stdin 全链路 |
+
 **待完成**：
 - TTS 真机验证（代码已写，被未知音频问题搁置）
 - 语音审批
 - 手机端 AgentBridgeService（网络中枢 fallback）
 - 代码清理：删 WiFi 死代码 ✅、抽 GestureHandler ✅、补主动 ack
+- **P0**：ccswitch 结构化工具审批 / 切换到 claude-api 适配器（实现 approve→执行闭环）
+- Core 端口被 NI Application Web Server 抢占时换 8088 端口
+- Agent Adapter 用 `127.0.0.1` 而非 `localhost`（避免 IPv6 断连）
 
 ### CXR-L SDK 联调
 

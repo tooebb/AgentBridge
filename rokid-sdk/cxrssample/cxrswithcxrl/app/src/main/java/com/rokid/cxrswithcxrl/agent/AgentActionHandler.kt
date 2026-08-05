@@ -47,6 +47,16 @@ class AgentActionHandler(
             baseBody
         }
         val renderHint = output?.renderHint?.takeIf { it.isNotBlank() } ?: renderHintFor(event?.eventType, event?.severity)
+
+        // Don't let status updates overwrite an active actionable card
+        if (currentState.renderHint == "actionable_card" && (renderHint == "status_card" || event?.eventType in CARD_PRESERVED_EVENTS)) {
+            currentState = currentState.copy(
+                lastAckedSeq = message.seq.coerceAtLeast(currentState.lastAckedSeq),
+                statusLine = "seq=${message.seq}, replay=${message.isReplay}, card preserved"
+            )
+            return currentState
+        }
+
         val severity = event?.severity ?: currentState.severity
         val statusLine = "seq=${message.seq}, replay=${message.isReplay}, event=${event?.eventType ?: "unknown"}"
 
@@ -143,5 +153,6 @@ class AgentActionHandler(
 
     companion object {
         private const val TAG = "AgentActionHandler"
+        private val CARD_PRESERVED_EVENTS = setOf("task_started", "task_running", "heartbeat")
     }
 }
