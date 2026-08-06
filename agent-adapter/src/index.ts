@@ -12,7 +12,7 @@ import { GenericCLIAdapter } from './adapters/generic-cli';
 import { AgentHub } from './hub';
 import { AgentBridgeClient } from './ws-client';
 import { EventNormalizer } from './normalizer';
-import type { AgentEvent } from './adapters/types';
+import type { AgentEvent, AgentInput } from './adapters/types';
 
 // ── Configuration (from env vars with sensible defaults) ──
 const SERVER_URL = process.env.AGENTBRIDGE_URL || 'http://localhost:8080';
@@ -91,23 +91,27 @@ if (process.env.AGENTBRIDGE_AGENT_CMD) {
   console.log(`  Generic CLI: ${process.env.AGENTBRIDGE_AGENT_CMD}`);
 }
 
+async function runAgentLoop(input: AgentInput): Promise<void> {
+  for await (const event of hub.execute(input)) {
+    await forwardEvent(event);
+  }
+  console.log('[adapter] agent turn complete, waiting for user actions...');
+}
+
 async function main(): Promise<void> {
   const adapter = await hub.select(PREFERRED_AGENT);
   normalizer = new EventNormalizer(SESSION_ID, adapter.name);
   wsClient.connect();
 
-  for await (const event of hub.execute({
+  await runAgentLoop({
     type: 'start_task',
     text: INITIAL_PROMPT,
     sessionId: SESSION_ID,
-  })) {
-    await forwardEvent(event);
-  }
+  });
 
-  if (!shuttingDown) {
-    wsClient.close();
-    await hub.shutdown();
-  }
+  // Keep process alive for user actions — do NOT close/shutdown here.
+  // The adapter stays connected to Core so approve/reject from glasses
+  // can be relayed back to the agent via the user_action handler below.
 }
 
 main().catch(async (err) => {

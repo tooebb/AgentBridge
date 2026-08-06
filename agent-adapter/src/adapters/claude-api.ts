@@ -7,6 +7,7 @@ import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAct
 interface ClaudeAPIAdapterOptions {
   apiKey?: string;
   model?: string;
+  baseUrl?: string;
 }
 
 export class ClaudeAPIAdapter implements AgentAdapter {
@@ -16,6 +17,7 @@ export class ClaudeAPIAdapter implements AgentAdapter {
   private client: Anthropic;
   private messages: MessageParam[] = [];
   private pendingToolUseId: string | null = null;
+  private pendingTool: { name: string; input: Record<string, unknown> } | null = null;
   private readonly model: string;
   private readonly apiKey?: string;
   private readonly tools: Tool[] = [
@@ -57,9 +59,12 @@ export class ClaudeAPIAdapter implements AgentAdapter {
   ];
 
   constructor(options: ClaudeAPIAdapterOptions = {}) {
-    this.apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
-    this.model = options.model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
-    this.client = new Anthropic({ apiKey: this.apiKey });
+    this.apiKey = options.apiKey || process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
+    this.model = options.model || process.env.ANTHROPIC_MODEL || 'deepseek-v4-pro';
+    this.client = new Anthropic({
+      apiKey: this.apiKey,
+      baseURL: options.baseUrl || process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
+    });
   }
 
   async connect(): Promise<void> {
@@ -107,6 +112,7 @@ export class ClaudeAPIAdapter implements AgentAdapter {
         const risk = this.assessRisk(tool.name, inputObject);
         if (risk >= 0.3) {
           this.pendingToolUseId = tool.id;
+          this.pendingTool = { name: tool.name, input: inputObject };
           yield { type: 'needs_approval', tool: tool.name, risk, taskId: tool.id };
           return;
         }
@@ -122,25 +128,34 @@ export class ClaudeAPIAdapter implements AgentAdapter {
   }
 
   async handleUserAction(action: DeviceAction): Promise<void> {
-    if (!this.pendingToolUseId) {
+    if (!this.pendingToolUseId || !this.pendingTool) {
       return;
     }
 
     const approved = action.type === 'approve' || action.type === 'continue';
+    const tool = this.pendingTool;
+    const toolUseId = this.pendingToolUseId;
+    this.pendingToolUseId = null;
+    this.pendingTool = null;
+
+    let content: string;
+    if (approved) {
+      content = await this.executeTool(tool.name, tool.input);
+    } else {
+      content = 'Rejected by the user from the connected device. Stop this action and propose a safer alternative.';
+    }
+
     this.messages.push({
       role: 'user',
       content: [
         {
           type: 'tool_result',
-          tool_use_id: this.pendingToolUseId,
-          content: approved
-            ? 'Approved by the user from the connected device. Continue.'
-            : 'Rejected by the user from the connected device. Stop this action and propose a safer alternative.',
+          tool_use_id: toolUseId,
+          content,
           is_error: !approved,
         },
       ],
     });
-    this.pendingToolUseId = null;
   }
 
   async disconnect(): Promise<void> {

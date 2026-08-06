@@ -53,6 +53,9 @@ export class AgentBridgeClient extends EventEmitter {
         const msg = JSON.parse(data.toString());
         this.emit('message', msg);
 
+        // Skip replay messages — only emit fresh user actions.
+        if (msg.is_replay) return;
+
         // If it's a user action relayed from Core, emit separately.
         if (msg.event?.action?.type) {
           this.emit('user_action', {

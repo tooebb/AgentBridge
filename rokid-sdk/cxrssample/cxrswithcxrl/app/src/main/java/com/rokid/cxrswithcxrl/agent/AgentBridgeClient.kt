@@ -56,6 +56,11 @@ class AgentBridgeClient(
 
     fun connect() {
         closedByUser = false
+        // Reset seq tracking on each new connection to handle Core restarts.
+        // Core's event store is in-memory and seq counters reset on restart.
+        seenSeqs.clear()
+        seenMessageIds.clear()
+        lastAckedSeq = 0L
         listener.onConnectionChanged("WS: connecting")
         val request = Request.Builder()
             .url(wsUrl())
