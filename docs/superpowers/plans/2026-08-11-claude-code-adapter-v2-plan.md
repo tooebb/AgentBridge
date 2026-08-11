@@ -18,6 +18,49 @@
 - 风控阈值 `AGENTBRIDGE_RISK_THRESHOLD`，默认 0.3
 - Core 不可用时 30s 自动放行（`AGENTBRIDGE_CORE_TIMEOUT`）
 
+## Entry Criteria（准入条件 — 以下必须全部通过才能开工）
+
+| # | 条件 | 验证方法 | 状态 |
+|---|------|---------|------|
+| EC-1 | Core seq/ack/replay 协议已实现 | `DeviceMessage.Seq` + `IsReplay`、`ClientMessage.LastAckedSeq` 字段存在，`EventStore.ReplaySince()` 可调用 | ✅ `types.go:107-129` |
+| EC-2 | 眼镜端 ack 跟踪已实现 | `AgentBridgeClient.kt` 中 `lastAckedSeq` 全程跟踪，重连时携带 `last_acked_seq` 查询参数 | ✅ Phase 2 验证通过（场景 6/12） |
+| EC-3 | Core → 眼镜审批闭环已跑通 | 12 场景全部通过，approve/reject 端到端可用 | ✅ 2026-08-11 |
+| EC-4 | `claude` 二进制可执行 | `claude --version` 返回正常 | ⬜ 需验证 |
+| EC-5 | `--output-format stream-json` 可用 | `echo "hello" \| claude -p "say hi" --output-format stream-json --verbose` 有 JSON 行输出 | ⬜ 需验证 |
+| EC-6 | `--input-format stream-json` 可用（或降级方案确认） | control 消息能通过 stdin JSON 接收 | ⬜ Task 7 Step 1-2 验证 |
+
+## Acceptance Matrix（验收矩阵）
+
+### 纯代码验收（Task 1-6，无需真机）
+
+| # | 场景 | 通过标准 | 验证方式 |
+|---|------|---------|---------|
+| A-1 | risk.ts 7 规则覆盖 | 8 个 Jest 测试全部 PASS | `npx jest risk.test.ts` |
+| A-2 | stream-json 行解析 | 5 个测试 PASS（system/assistant/result/空行/非JSON） | `npx jest claude.test.ts` |
+| A-3 | control 拦截 + 审批门 | 4 个测试 PASS（自动放行/暂停/approve/deny） | `npx jest claude.test.ts` |
+| A-4 | TypeScript 编译 | `tsc --noEmit` 零错误 | CI / 手动 |
+| A-5 | 旧 adapter 不退化 | `ClaudeAPIAdapter` 测试不变（risk.ts 提取后行为一致） | `npx jest` |
+
+### E2E 验收（Task 7，需真机 + Core + 眼镜）
+
+| # | 场景 | 通过标准 | 验证方式 |
+|---|------|---------|---------|
+| E-1 | 低风险自动放行 | 只读工具（Read/Grep）不弹审批卡片，adapter 日志显示 `auto-allow` | 真机 |
+| E-2 | 高风险审批通过 | Write 工具 → 眼镜 actionable_card → 单击 approve → 文件写入成功 → task_completed | 真机 |
+| E-3 | 高风险拒绝 | rm 命令 → 眼镜 actionable_card → 双击 reject → 工具不执行 → Claude Code 换方案 | 真机 |
+| E-4 | Core 断连降级 | 审批等待期间 kill Core → 30s 后 adapter 日志显示 `auto-allowing` → Claude Code 会话不丢失 | 真机 |
+| E-5 | 眼镜断连重连 | 审批期间拔眼镜 USB → 重连后卡片不丢失（seq 回放） → approve 正常执行 | 真机 |
+
+### 不做（Explicit Non-Goals）
+
+| 项目 | 原因 |
+|------|------|
+| 语音审批 | 依赖 ASR/权限/安全审计，独立 Phase |
+| Phone AgentBridgeService | Phase 3a 用 LAN 直连，Phone 仅做 CXR 生命周期 |
+| 多 Agent 并发 | 当前单 session 模型，Phase 3b 扩展 |
+| 通用插件生态 / SDK | Phase 3c |
+| Codex adapter 实现 | Phase 3b（设计已预留扩展点） |
+
 ---
 
 ### Task 1: 共享风控模块 risk.ts

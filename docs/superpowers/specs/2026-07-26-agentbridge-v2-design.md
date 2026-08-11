@@ -669,6 +669,12 @@ agentbridge/
 
 ### Phase 3 — 端到端集成
 
+> **注意：此节已过时。** Phase 3 已重新规划为 Phase 3a/3b/3c 三层路线。
+> 当前活跃文档：
+> - Spec: `docs/superpowers/specs/2026-08-11-claude-code-adapter-v2-design.md`
+> - Plan: `docs/superpowers/plans/2026-08-11-claude-code-adapter-v2-plan.md`
+> - 进度：Phase 3a spec + plan 已完成，待 Codex 执行 Task 1-6（纯代码），Task 7（E2E 验证）需真机环境。
+
 | # | 任务 | 预估 | 依赖 |
 |---|------|------|------|
 | 3.1 | Phone CXR 生命周期管理（仅 install/start）| 0.5 天 | Phase 2 |
