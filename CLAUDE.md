@@ -105,13 +105,18 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - 眼镜重启后需用 ADB 开一次 WiFi（已加入 watchdog 自动执行）
 - 日常使用全程无线，只有眼镜完全断电才需重新插 USB 开 WiFi
 
-### Phase 3（多 Agent 集成 / 生产加固）— 🔜 规划中
+### Phase 3（多 Agent 集成 / 生产加固）— 🔜 进行中
+
+**Phase 3a（真实本地 Agent 会话适配层 MVP）** — 📋 设计完成，待开发
+- Spec: `docs/superpowers/specs/2026-08-11-claude-code-adapter-v2-design.md`
+- Plan: `docs/superpowers/plans/2026-08-11-claude-code-adapter-v2-plan.md`
+- 目标：Claude Code CLI → AgentBridge → 眼镜审批闭环（stream-json control 协议拦截 + 风控分级）
+- 不追求通用插件生态，先跑通一个主 adapter
 
 **Phase 2 刻意推迟到 Phase 3 的项目**：
 - TTS 真机验证（代码已写，音频引擎初始化失败，需排查 Rokid 音频路由）
 - 语音审批（依赖 TTS 可用）
-- 手机端 AgentBridgeService（作为网络中枢 fallback，ADB 隧道在开发阶段已够用）
-- claude-cli 适配器增强（real local agent session adapter — 让 Claude Code 也走审批闭环）
+- 手机端 AgentBridgeService（作为网络中枢 fallback）
 - middleware-core 测试（Go 表驱动测试 for dispatcher + approval manager）
 - 主动 ack 补全（当前 seq 去重已覆盖核心场景）
 - 认证/安全层

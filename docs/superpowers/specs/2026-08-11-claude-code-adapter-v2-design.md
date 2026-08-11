@@ -1,6 +1,7 @@
 # Claude Code CLI Adapter V2 设计文档
 
 **日期：** 2026-08-11
+**阶段：** Phase 3a — 真实本地 Agent 会话适配层 MVP
 **状态：** 设计阶段
 **范围：** 增强 ClaudeCodeAdapter，使真实 Claude Code CLI 进程走审批闭环
 

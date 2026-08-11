@@ -1,7 +1,8 @@
-# Claude Code CLI Adapter V2 实施计划
+# Phase 3a — Claude Code CLI Adapter V2 实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**阶段：** Phase 3a — 真实本地 Agent 会话适配层 MVP
 **Goal:** 增强 ClaudeCodeAdapter，使真实 Claude Code CLI 进程的高风险工具调用经过眼镜审批后才能执行。
 
 **Architecture:** 从 claude-api.ts 提取共享风控模块 risk.ts → 重写 claude.ts 的 stream-json 解析、control 消息拦截、审批门和 stdin 响应 → 在 index.ts 中提升 ClaudeCodeAdapter 优先级。审批链路（normalizer → ws-client → Core → 眼镜）零改动。
