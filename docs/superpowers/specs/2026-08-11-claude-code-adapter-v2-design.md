@@ -297,9 +297,57 @@ RUNNING → DONE (result msg or process exit)
 
 ---
 
-## 8. 测试策略
+## 8. 多 Agent 扩展性
 
-### 8.1 单元测试（`agent-adapter/src/adapters/__tests__/claude.test.ts`）
+Claude Code 是第一个，但不是唯一目标。架构从第一天起就预留了多 agent 接入点：
+
+### 8.1 扩展点
+
+```
+                    AgentAdapter 接口（agent 无关）
+                    ┌─────────────────────────┐
+                    │ connect()                │
+                    │ send(input) → AgentEvent │
+                    │ handleUserAction(action) │
+                    │ disconnect()             │
+                    └──────────┬──────────────┘
+                               │
+          ┌────────────────────┼────────────────────┐
+          │                    │                    │
+   ClaudeCodeAdapter    CodexAdapter       GenericTerminalAdapter
+   (stream-json)        (Codex CLI/WSS)    (PTY + 文本规则)
+```
+
+**三个扩展维度：**
+
+| 维度 | 说明 | 例子 |
+|------|------|------|
+| 新 adapter 实现 | 新文件实现 `AgentAdapter` 接口，注册到 Hub | `codex.ts`, `windsurf.ts`, `aider.ts` |
+| 共享风控规则 | `risk.ts` 用 `toolPattern` 正则，同时覆盖多 agent 工具名 | `/^(Write\|write_to_file\|Edit\|replace_in_file)$/` |
+| 共享审批管道 | normalizer → ws-client → Core → 眼镜，完全不感知 agent 类型 | 零改动 |
+
+### 8.2 接入新 Agent 的代价
+
+| Agent | 通信协议 | 预计工作量 | 关键挑战 |
+|-------|---------|-----------|---------|
+| **Codex CLI** | 也是 stream-json（跟 Claude Code 同源） | 低（~100 行新文件） | Codex 的 control 消息格式可能有微小差异 |
+| **Codex (OpenAI API)** | HTTP SSE / streaming chat completions | 中（~200 行新文件） | tool_use 格式不同（`function_call` vs `tool_use`），需要翻译层 |
+| **任意 CLI Agent** | PTY stdin/stdout | 中高（~300 行） | 无结构化输出，依赖 regex 规则解析工具调用 |
+| **Aider / Continue / Cline** | 各有自己的 CLI 协议 | 视情况 | 每个都要单独调研协议 |
+
+### 8.3 Phase 3b 预埋
+
+当前设计中的 `GenericTerminalAdapter`（`src/adapters/generic-cli.ts`）已经是 PTY 模式的雏形。V2 完成后，下一步自然演进：
+
+1. 把 `risk.ts` 和审批门从 `ClaudeCodeAdapter` 中解耦为独立模块
+2. `GenericTerminalAdapter` 接入同一套风控 + 审批管道
+3. 任何新 agent 只需要写"协议翻译"层（agent 输出 → `AgentEvent`），审批逻辑零重复
+
+---
+
+## 9. 测试策略
+
+### 9.1 单元测试（`agent-adapter/src/adapters/__tests__/claude.test.ts`）
 
 | 测试 | 验证点 |
 |------|--------|
@@ -309,7 +357,7 @@ RUNNING → DONE (result msg or process exit)
 | handleUserAction | approve → stdin `"allow"`, reject → stdin `"deny"` |
 | 异常 JSON / 非 JSON 行 | 不崩溃，fallback 为 text event |
 
-### 8.2 集成测试（mock claude 脚本）
+### 9.2 集成测试（mock claude 脚本）
 
 用一个 shell 脚本模拟 Claude Code 的 stream-json 输出：
 
@@ -324,7 +372,7 @@ echo '{"type":"result","session_id":"test","usage":{}}'
 
 验证 adapter 正确拦截 control、等待 Core 响应、写入 stdin allow/deny。
 
-### 8.3 E2E 测试（真机）
+### 9.3 E2E 测试（真机）
 
 ```bash
 # 启动 Core
@@ -345,7 +393,7 @@ cd agent-adapter && AGENTBRIDGE_AGENT=claude-cli AGENTBRIDGE_SESSION=default \
 
 ---
 
-## 9. 文件清单
+## 10. 文件清单
 
 | 文件 | 操作 | 说明 |
 |------|------|------|
