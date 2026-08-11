@@ -13,6 +13,19 @@ $coreHealth = "http://127.0.0.1:8088/health"
 while ($true) {
     Start-Sleep -Seconds 10
 
+    # --- ADB daemon auto-restart ---
+    # If adb daemon is dead or port-locked, restart it so WiFi keep-alive
+    # and tunnel checks don't silently fail.
+    try {
+        $devList = & $adb devices 2>&1
+        if ($LASTEXITCODE -ne 0 -or $devList -match "cannot connect|still not running") {
+            Write-Host "[watchdog] $(Get-Date -Format 'HH:mm:ss') adb daemon dead, restarting..."
+            & $adb kill-server 2>$null
+            Start-Sleep -Seconds 2
+            & $adb start-server 2>$null
+        }
+    } catch { }
+
     try {
         $health = Invoke-WebRequest -Uri $coreHealth -TimeoutSec 3 -ErrorAction Stop
         if ($health.StatusCode -ne 200) { continue }
