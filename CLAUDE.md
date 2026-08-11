@@ -34,71 +34,94 @@ cd mock-device && npm install && npm run phone
 - `docs/` — 架构设计、需求、W3 联调清单和历史设计/计划文档
 - 当前目录是 Git 仓库；改动前后用 `git status --short --branch` 确认工作区状态
 
-## 当前状态 (2026-08-04)
+## 当前状态 (2026-08-11)
 
 ### Phase 1（PC only）— ✅ 全部完成
 
 Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议对齐。
 
-### Phase 2（WiFi 联调 / 真机）— 🔄 核心闭环已跑通
+### Phase 2（真机联调 / 端到端闭环）— ✅ 全部完成 (2026-08-11)
 
-**眼镜端（cxrswithcxrl，`com.rokid.cxrswithcxrl`）**：
+**核心成果**：Agent 输出 → 眼镜卡片渲染 → 用户手势审批 → 工具真正执行 → 结果回传，完整闭环跑通。
+
+**眼镜端组件（cxrswithcxrl，`com.rokid.cxrswithcxrl`）**：
+
 | 组件 | 文件 | 状态 |
 |------|------|------|
 | 协议数据类 | `agent/AgentBridgeProtocol.kt` | ✅ |
 | WS 客户端 + 重连 | `agent/AgentBridgeClient.kt` | ✅ |
-| 卡片状态 + TTS | `agent/AgentActionHandler.kt` | TTS 代码已写，待真机验证 |
+| 卡片状态 + TTS | `agent/AgentActionHandler.kt` | ✅ 卡片逻辑已验证，TTS 代码已写待真机验证音频 |
 | Compose 卡片 UI | `agent/CardRenderer.kt` | ✅ |
-| 键盘手势处理 | `activities/main/MainActivity.kt` | ✅ 真机验证通过 |
+| 键盘手势处理 | `activities/main/MainActivity.kt` | ✅ |
 | 集成层 | `activities/main/MainViewModel.kt` | ✅ |
 
-**真机验证结果（2026-08-04，ADB 隧道直连）**：
+**真机验证 — 12 场景全部通过**：
 
-| # | 场景 | 结果 |
-|---|------|------|
-| 1 | WebSocket 连接 | ✅ Core 收到 `device_type=ar_glasses` |
-| 2 | 卡片显示 | ✅ status/actionable/alert 卡片正常渲染 |
-| 3 | 单击 → approve | ✅ 500ms 消抖，Core 收到 `action.type=approve` |
-| 4 | 双击 → reject | ✅ 两次 keyCode=83 在 500ms 内视为双击 |
-| 5 | 滑动 → view_details | ✅ 向镜腿=19 / 向镜片=20，Core 记录日志 |
-| 6 | 断连重连 | ✅ 指数退避重连 + is_replay 去重 |
-
-**手机端（CXRLSample）**：仅做 CXR 生命周期（install + start），不参与数据面。
-
-**2026-08-05 新增**：
-
-| # | 场景 | 结果 |
-|---|------|------|
-| 7 | 卡片保护 | ✅ actionable_card 不被 task_running 覆盖 |
-| 8 | E2E relay 验证 | ✅ Core→眼镜→Core→Agent Adapter→ccswitch stdin 全链路 |
-
-**待完成**：
-- TTS 真机验证（代码已写，被未知音频问题搁置）
-- 语音审批
-- 手机端 AgentBridgeService（网络中枢 fallback）
-- 代码清理：删 WiFi 死代码 ✅、抽 GestureHandler ✅、补主动 ack
-- ~~P0：ccswitch 结构化工具审批 / 切换到 claude-api 适配器~~ → ✅ claude-api + DeepSeek 集成完成，approve→execute 闭环已验证
-- 眼镜 APK 重编译（包含 seq 重置修复 + tunnel watchdog 已落地）
-- 写 Phase 2 实施计划、middleware-core 测试
-
-**2026-08-11 新增 — approve→execute 闭环 + 三项真机测试**：
-
-| # | 场景 | 结果 |
-|---|------|------|
-| 9 | DeepSeek 集成 | ✅ `ANTHROPIC_BASE_URL` + `deepseek-v4-pro`，tool_use→needs_approval 自动触发 |
-| 10 | **approve→execute 闭环** | ✅ 眼镜单击→工具真正执行→文件创建成功（write_file） |
-| 11 | **reject 拒绝** | ✅ 双击→工具不执行→DeepSeek 收到拒绝→换方案 |
-| 12 | **断连重连** | ✅ Core 重启→适配器+眼镜自动重连（指数退避） |
+| # | 场景 | 日期 | 结果 |
+|---|------|------|------|
+| 1 | WebSocket 连接 | 08-04 | ✅ Core 收到 `device_type=ar_glasses` |
+| 2 | 卡片显示 | 08-04 | ✅ status/actionable/alert 卡片正常渲染 |
+| 3 | 单击 → approve | 08-04 | ✅ 500ms 消抖，Core 收到 action |
+| 4 | 双击 → reject | 08-04 | ✅ 500ms 内两次 keyCode=83 视为双击 |
+| 5 | 滑动 → view_details | 08-04 | ✅ 向镜腿=19 / 向镜片=20 |
+| 6 | 断连重连 | 08-04 | ✅ 指数退避 + is_replay 去重 |
+| 7 | 卡片保护 | 08-05 | ✅ actionable_card 不被 task_running 覆盖 |
+| 8 | E2E relay 验证 | 08-05 | ✅ Core→眼镜→Core→Adapter→ccswitch 全链路 |
+| 9 | DeepSeek API 集成 | 08-11 | ✅ anthropic 协议兼容，model=deepseek-v4-pro |
+| 10 | **approve→execute 闭环** | 08-11 | ✅ 单击→工具执行→文件写入成功 |
+| 11 | **reject 拒绝** | 08-11 | ✅ 双击→工具不执行→Agent 收到拒绝换方案 |
+| 12 | **Core 重启恢复** | 08-11 | ✅ 适配器+眼镜自动重连，seq 重置不丢卡片 |
 
 **4 项关键 bug 修复（commit `c6ad543`）**：
 - adapter: approve 后真正执行工具（之前只返回"Approved"文本）
-- adapter: main() 不再在 agent turn 后 close/shutdown
-- adapter: ws-client 过滤 `is_replay` 消息
-- glasses: connect 时重置 seq 跟踪
+- adapter: main() 不再在 agent turn 后 close/shutdown，保持进程等待用户操作
+- adapter: ws-client 过滤 `is_replay` 消息，防止旧事件重放级联
+- glasses: `connect()` 时重置 seq 跟踪，防止 Core 重启后卡片僵死
 
-**环境启动必查**（`scripts/tunnel-watchdog.ps1` 已自动化隧道守护）：
-- ADB 隧道必须建在**两台设备**上（手机 + 眼镜），不是只有手机
-- 眼镜 CustomApp 跑在眼镜端（`1901092534002787`），`127.0.0.1:19090` 是眼镜的 localhost
+**新建设施**：
+- `scripts/tunnel-watchdog.ps1` — 眼镜 WiFi 保活 + ADB 隧道守护 + ADB daemon 自动恢复（每 10s）
+- `scripts/deploy-apk.ps1` — APK 推送→安装→验证→自动开 WiFi 一键部署
+
+**手机端（CXRLSample）**：仅做 CXR 生命周期（install + start），不参与数据面。
+
+### 眼镜 WiFi 发现与 LAN 直连 (2026-08-11)
+
+**重大发现**：眼镜有完整 WiFi 6 硬件（wlan0, 芯片 kiwi_v2），支持 5GHz 频段。之前"眼镜没有 WiFi"的判断是错的——系统默认禁用 station 模式以省电。
+
+| 项 | 值 |
+|----|-----|
+| WiFi 芯片 | Qualcomm kiwi_v2, WiFi 6 |
+| 连接网络 | GAEA, 5GHz (5200MHz) |
+| 眼镜 IP | 192.168.31.50 |
+| PC IP | 192.168.31.209 |
+| 信号 | RSSI -21 ~ -19, 极好 |
+| 延时 | ping < 10ms |
+
+**连接模式**：从 ADB 反向隧道 (`ws://127.0.0.1:19090`) 改为 LAN 直连 (`ws://192.168.31.209:8088`)。
+
+**WiFi 稳定性**：
+- Android 10+ 禁止非系统 App 调用 `setWifiEnabled()`，App 无法自行开 WiFi
+- App 启动时申请 `WIFI_MODE_FULL_HIGH_PERF` WiFiLock，**锁住后熄屏不掉**
+- 眼镜重启后需用 ADB 开一次 WiFi（已加入 watchdog 自动执行）
+- 日常使用全程无线，只有眼镜完全断电才需重新插 USB 开 WiFi
+
+### Phase 3（多 Agent 集成 / 生产加固）— 🔜 规划中
+
+**Phase 2 刻意推迟到 Phase 3 的项目**：
+- TTS 真机验证（代码已写，音频引擎初始化失败，需排查 Rokid 音频路由）
+- 语音审批（依赖 TTS 可用）
+- 手机端 AgentBridgeService（作为网络中枢 fallback，ADB 隧道在开发阶段已够用）
+- claude-cli 适配器增强（real local agent session adapter — 让 Claude Code 也走审批闭环）
+- middleware-core 测试（Go 表驱动测试 for dispatcher + approval manager）
+- 主动 ack 补全（当前 seq 去重已覆盖核心场景）
+- 认证/安全层
+
+**环境启动必查**：
+- Core 端口 → `AGENTBRIDGE_ADDR=":8088"`（避免 NI Application Web Server 抢占 8080）
+- Agent Adapter → `AGENTBRIDGE_SESSION=default`（与眼镜同 session）
+- ADB 隧道 → 双设备（手机 `4EU0221B11003871` + 眼镜 `1901092534002787`）
+- 连通验证 → `curl http://127.0.0.1:19090/health` 应返回 200
+- 守护进程 → `scripts/tunnel-watchdog.ps1` 保持运行
 
 ### CXR-L SDK 联调
 

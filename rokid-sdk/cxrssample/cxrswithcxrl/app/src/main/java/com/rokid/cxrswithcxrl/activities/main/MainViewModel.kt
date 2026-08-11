@@ -1,9 +1,11 @@
 package com.rokid.cxrswithcxrl.activities.main
 
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
+import android.provider.Settings
 import android.util.Base64
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -38,6 +40,7 @@ class MainViewModel: ViewModel() {
     private val cxrBridge = CXRServiceBridge()
     private var agentClient: AgentBridgeClient? = null
     private var actionHandler: AgentActionHandler? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
 
     private val cmdKey = "rk_custom_key"
     private val clientKey = "rk_custom_client"
@@ -164,25 +167,76 @@ class MainViewModel: ViewModel() {
         }
         actionHandler = handler
 
-        // ADB reverse tunnel: glasses 127.0.0.1:19090 → PC :19090
-        // Skip all WiFi logic — glasses have no station-mode WiFi, only AP-mode
-        val adbUrl = "ws://127.0.0.1:19090"
-        netInfo = "$netInfo | ADB reverse mode"
-        _debugStatus.value = debugText("adb tunnel")
+        // Keep WiFi on: the glasses OS disables WiFi to save power.
+        // Try direct shell command first (Rokid ROM may allow it), fall
+        // back to WifiManager, then wifi panel as last resort.
+        try {
+            val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            if (wm != null && !wm.isWifiEnabled) {
+                netInfo = "$netInfo | wifi:off"
+                // 1) shell command (works on some custom ROMs)
+                val shellOk = try {
+                    val p = Runtime.getRuntime().exec(arrayOf("svc", "wifi", "enable"))
+                    p.waitFor()
+                    val exit = p.exitValue()
+                    netInfo = "$netInfo | svc:exit=$exit"
+                    exit == 0
+                } catch (e: Exception) {
+                    netInfo = "$netInfo | svc:${e.javaClass.simpleName}"
+                    false
+                }
+                // 2) WifiManager (no-op on AOSP 10+ but may work on custom ROM)
+                if (!shellOk) {
+                    try { wm.setWifiEnabled(true) } catch (_: Exception) {}
+                }
+                // Wait briefly for WiFi to come up
+                try { Thread.sleep(500) } catch (_: Exception) {}
+                // 3) Still off → open system panel
+                if (!wm.isWifiEnabled) {
+                    try {
+                        val intent = Intent(Settings.Panel.ACTION_WIFI)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        appContext.startActivity(intent)
+                    } catch (e: Exception) {
+                        try {
+                            appContext.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            })
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+            // Always hold WiFiLock regardless of how WiFi was enabled
+            val lock = wm?.createWifiLock(
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF, "AgentBridge:WiFiLock"
+            )
+            lock?.acquire()
+            wifiLock = lock
+            netInfo = "$netInfo | wifiLock:held"
+        } catch (e: Exception) {
+            netInfo = "$netInfo | wifiLock:${e.javaClass.simpleName}"
+        }
+
+        // LAN direct: glasses WiFi connects to PC on same LAN
+        val pcIp = "192.168.31.209"
+        val pcPort = 8088
+        val serverUrl = "ws://$pcIp:$pcPort"
+        netInfo = "$netInfo | LAN direct mode"
+        _debugStatus.value = debugText("lan direct")
         // Quick TCP probe then connect
         Thread {
             val tcpResult = try {
                 val sock = java.net.Socket()
-                sock.connect(java.net.InetSocketAddress("127.0.0.1", 19090), 5000)
+                sock.connect(java.net.InetSocketAddress(pcIp, pcPort), 5000)
                 val ok = sock.isConnected
                 sock.close()
                 if (ok) "TCP:OK" else "TCP:clsd"
             } catch (e: Exception) {
                 "TCP:${e.javaClass.simpleName}"
             }
-            netInfo = "$netInfo | adbUrl=$adbUrl $tcpResult"
+            netInfo = "$netInfo | serverUrl=$serverUrl $tcpResult"
             _debugStatus.value = debugText("tcp done")
-            createClient(appContext, handler, adbUrl, null)
+            createClient(appContext, handler, serverUrl, null)
         }.start()
     }
 
@@ -289,6 +343,7 @@ class MainViewModel: ViewModel() {
     override fun onCleared() {
         agentClient?.disconnect()
         actionHandler?.close()
+        try { wifiLock?.release() } catch (_: Exception) {}
         super.onCleared()
     }
 }
