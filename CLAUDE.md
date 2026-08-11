@@ -77,9 +77,28 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - 语音审批
 - 手机端 AgentBridgeService（网络中枢 fallback）
 - 代码清理：删 WiFi 死代码 ✅、抽 GestureHandler ✅、补主动 ack
-- **P0**：ccswitch 结构化工具审批 / 切换到 claude-api 适配器（实现 approve→执行闭环）
-- Core 端口被 NI Application Web Server 抢占时换 8088 端口
-- Agent Adapter 用 `127.0.0.1` 而非 `localhost`（避免 IPv6 断连）
+- ~~P0：ccswitch 结构化工具审批 / 切换到 claude-api 适配器~~ → ✅ claude-api + DeepSeek 集成完成，approve→execute 闭环已验证
+- 眼镜 APK 重编译（包含 seq 重置修复 + tunnel watchdog 已落地）
+- 写 Phase 2 实施计划、middleware-core 测试
+
+**2026-08-11 新增 — approve→execute 闭环 + 三项真机测试**：
+
+| # | 场景 | 结果 |
+|---|------|------|
+| 9 | DeepSeek 集成 | ✅ `ANTHROPIC_BASE_URL` + `deepseek-v4-pro`，tool_use→needs_approval 自动触发 |
+| 10 | **approve→execute 闭环** | ✅ 眼镜单击→工具真正执行→文件创建成功（write_file） |
+| 11 | **reject 拒绝** | ✅ 双击→工具不执行→DeepSeek 收到拒绝→换方案 |
+| 12 | **断连重连** | ✅ Core 重启→适配器+眼镜自动重连（指数退避） |
+
+**4 项关键 bug 修复（commit `c6ad543`）**：
+- adapter: approve 后真正执行工具（之前只返回"Approved"文本）
+- adapter: main() 不再在 agent turn 后 close/shutdown
+- adapter: ws-client 过滤 `is_replay` 消息
+- glasses: connect 时重置 seq 跟踪
+
+**环境启动必查**（`scripts/tunnel-watchdog.ps1` 已自动化隧道守护）：
+- ADB 隧道必须建在**两台设备**上（手机 + 眼镜），不是只有手机
+- 眼镜 CustomApp 跑在眼镜端（`1901092534002787`），`127.0.0.1:19090` 是眼镜的 localhost
 
 ### CXR-L SDK 联调
 
