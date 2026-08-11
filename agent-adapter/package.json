@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test dist/__tests__/*.js",
     "start": "node dist/index.js",
     "dev": "npx ts-node src/index.ts"
   },

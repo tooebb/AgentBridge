@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { ContentBlockParam, MessageParam, Tool } from '@anthropic-ai/sdk/resources/messages';
 import { exec } from 'child_process';
 import { readFile, writeFile } from 'fs/promises';
+import { assessRisk } from '../risk';
 import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types';
 
 interface ClaudeAPIAdapterOptions {
@@ -109,7 +110,7 @@ export class ClaudeAPIAdapter implements AgentAdapter {
 
       for (const tool of toolUses) {
         const inputObject = this.asObject(tool.input);
-        const risk = this.assessRisk(tool.name, inputObject);
+        const risk = assessRisk(tool.name, inputObject);
         if (risk >= 0.3) {
           this.pendingToolUseId = tool.id;
           this.pendingTool = { name: tool.name, input: inputObject };
@@ -168,16 +169,6 @@ export class ClaudeAPIAdapter implements AgentAdapter {
     if (input.action?.type) return `Device action received: ${input.action.type}. Continue.`;
     if (input.type === 'start_task') return 'Start the task.';
     return 'Continue.';
-  }
-
-  private assessRisk(toolName: string, input: Record<string, unknown>): number {
-    if (toolName === 'run_shell') {
-      const command = String(input.command || '');
-      if (/\b(rm|sudo|chmod|chown|mkfs|dd|curl|wget)\b/.test(command)) return 0.8;
-      return 0.3;
-    }
-    if (toolName === 'write_file') return 0.4;
-    return 0;
   }
 
   private async executeTool(name: string, input: Record<string, unknown>): Promise<string> {

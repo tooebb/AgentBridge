@@ -1,4 +1,6 @@
+import { ClaudeCodeAdapter } from './adapters/claude';
 import { ClaudeAPIAdapter } from './adapters/claude-api';
+import { GenericCLIAdapter } from './adapters/generic-cli';
 import { OpenAICompatibleAdapter } from './adapters/openai-compatible';
 import type { AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './adapters/types';
 
@@ -7,8 +9,15 @@ export class AgentHub {
   private active: AgentAdapter | null = null;
 
   constructor() {
+    this.register(new ClaudeCodeAdapter({
+      claudePath: process.env.CLAUDE_PATH || 'claude',
+      sessionId: process.env.AGENTBRIDGE_SESSION || `session-${Date.now()}`,
+    }));
     this.register(new ClaudeAPIAdapter());
     this.register(new OpenAICompatibleAdapter());
+    this.register(new GenericCLIAdapter({
+      sessionId: process.env.AGENTBRIDGE_SESSION || `session-${Date.now()}`,
+    }));
   }
 
   register(adapter: AgentAdapter): void {
@@ -18,7 +27,7 @@ export class AgentHub {
   async select(preferred?: string): Promise<AgentAdapter> {
     const order = preferred
       ? [preferred]
-      : ['claude-api', 'openai-compatible', 'generic-cli', 'claude-cli'];
+      : ['claude-cli', 'claude-api', 'openai-compatible', 'generic-cli'];
 
     for (const name of order) {
       const adapter = this.adapters.get(name);
