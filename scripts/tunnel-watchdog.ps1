@@ -1,10 +1,13 @@
-# Tunnel Watchdog — keeps ADB reverse tunnel alive
+# Tunnel Watchdog — ADB reverse tunnels + glasses WiFi keep-alive
 # Run in background: Start-Process powershell -ArgumentList "-File scripts/tunnel-watchdog.ps1" -WindowStyle Hidden
+#
+# Architecture v2 (2026-08-11): Glasses connect to Core via LAN WiFi (ws://192.168.31.209:8088).
+# ADB reverse tunnels are fallback; the primary role is keeping glasses WiFi alive
+# because Android 10+ blocks setWifiEnabled() from non-system apps.
 
 $adb = "C:\Users\_\AppData\Local\Android\Sdk\platform-tools\adb.exe"
-# Both devices need tunnels — the CustomApp runs on the GLASSES (1901092534002787)
-# and uses localhost:19090 to reach the PC via ADB reverse
 $devices = @("4EU0221B11003871", "1901092534002787")
+$glassesDev = "1901092534002787"
 $coreHealth = "http://127.0.0.1:8088/health"
 
 while ($true) {
@@ -16,6 +19,25 @@ while ($true) {
     } catch {
         continue
     }
+
+    # --- Glasses WiFi keep-alive ---
+    # The glasses OS disables WiFi to save power; the app holds a WiFiLock once
+    # running, but after reboot or crash WiFi is off.  This block re-enables it.
+    try {
+        $available = & $adb devices 2>$null | Select-String $glassesDev
+        if ($available) {
+            $wifiStatus = & $adb -s $glassesDev shell "dumpsys wifi | grep 'Wi-Fi is'" 2>$null
+            if ($wifiStatus -match "disabled") {
+                Write-Host "[watchdog] $(Get-Date -Format 'HH:mm:ss') glasses WiFi disabled, enabling..."
+                & $adb -s $glassesDev shell "svc wifi enable" 2>$null
+                Start-Sleep -Seconds 3
+                $wifiCheck = & $adb -s $glassesDev shell "dumpsys wifi | grep 'Wi-Fi is'" 2>$null
+                if ($wifiCheck -match "enabled") {
+                    Write-Host "[watchdog] $(Get-Date -Format 'HH:mm:ss') glasses WiFi enabled OK"
+                }
+            }
+        }
+    } catch { }  # glasses may be offline — skip this cycle
 
     foreach ($device in $devices) {
         $available = & $adb devices 2>$null | Select-String $device
