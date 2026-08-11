@@ -4,7 +4,7 @@
 > **MVP 目标**：4-6 周
 > **首个硬件终端**：Rokid RG-glasses（AR 眼镜），CXR-L/CXR-S SDK
 > **参考对比**：GPT 提供的架构骨架（6 层模型）→ 融合优化为当前方案
-> **当前文档状态**：2026-07-27 已按仓库实现同步；生产化规划与真实 Phone/Glass 客户端实现明确标注为后续工作。
+> **当前文档状态**：2026-07-27 已按仓库实现同步。Phase 2 已于 2026-08-11 完成（12 场景全部通过），Phase 3a spec+plan 已交付。**当前权威入口为 CLAUDE.md**，本架构文档保留为设计参考，进度信息可能滞后。
 
 ---
 
@@ -468,8 +468,9 @@ Phone ← CXR-L SDK → Glass（仅生命周期：appUploadAndInstall + appStart
 | 阶段 | 目标 | 状态 |
 |------|------|------|
 | **Phase 1** (PC only) | Core + Agent Adapter + Dashboard + Mock Device + SQLite/W3 协议 | ✅ 已完成 (2026-07-26) |
-| **Phase 2** (WiFi 联调) | 眼镜端 WebSocket 客户端 + 卡片渲染 + TTS + 按键审批 + 真机验收 | 🔄 开发中 (2026-07-28：眼镜端 MVP 代码已落地，待 Android 环境编译和真机验收) |
-| **Phase 3** (三端集成) | 手机/手表/耳机完整客户端 + 生产化安全/存储 + 跨实例部署 | 📋 规划中 |
+| **Phase 2** (WiFi 联调) | 眼镜端 WebSocket 客户端 + 卡片渲染 + TTS + 按键审批 + 真机验收 | ✅ 已完成 (2026-08-11) — 12 场景全部通过 |
+| **Phase 3a** (Agent 适配) | Claude Code CLI Adapter V2 — 真实 Agent 审批闭环 | 📋 Spec + Plan 已完成，待开发 |
+| **Phase 3b/c** (多 Agent / 开源化) | Codex, GenericTerminalAdapter, SDK, 协议文档 | 🔜 规划中 |
 
 ---
 

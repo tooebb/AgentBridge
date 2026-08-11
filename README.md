@@ -1,6 +1,6 @@
 # AgentBridge
 
-> 当前文档状态：2026-07-27 已按代码实现同步。`docs/superpowers/` 下的 dated spec/plan 是历史设计和执行记录；当前使用、运行与验收以本 README、`CLAUDE.md` 和 `docs/w3-integration-checklist.md` 为准。
+> **当前文档状态：** CLAUDE.md 是此仓库的权威入口（每次会话自动加载，保持最新）。本 README 提供概览，`docs/superpowers/` 下的 dated spec/plan 是历史设计和执行记录。如有矛盾，以 CLAUDE.md 为准。
 
 > AI Agent 跨设备交互中间层 —— 让 Vibe Coding 不再被绑在电脑前。
 
@@ -208,23 +208,16 @@ npm run test:e2e
 - `agent/CardRenderer.kt`：Compose 状态卡片、审批卡片和调试状态行。
 - `activities/main/MainViewModel.kt` / `MainActivity.kt`：WS 生命周期、ADB TCP probe、CXR bridge。
 
-**连接模式：**
+**连接模式（2026-08-11 更新）：**
 
-开发阶段使用 ADB reverse tunnel，眼镜端通过 `ws://127.0.0.1:19090` 直连 PC Core：
+日常使用 LAN 直连（眼镜 WiFi → PC Core），ADB 仅在眼镜重启后开 WiFi 时用一次。
+
 ```bash
-# PC 端建立隧道（手机已通过 USB 连接）
-adb reverse tcp:19090 tcp:8080
-```
+# LAN 直连（日常使用，全程无线）
+# 眼镜 App 连接 ws://192.168.31.209:8088
 
-眼镜端 `AgentBridgeClient.DEFAULT_SERVER_URL` 默认值：
-```kotlin
-const val DEFAULT_SERVER_URL = "ws://127.0.0.1:19090"
-const val DEFAULT_SESSION_ID = "default"
-```
-
-现场部署时改为 Core 所在电脑的局域网 IP 和端口：
-```kotlin
-const val DEFAULT_SERVER_URL = "ws://192.168.1.100:8080"
+# ADB 反向隧道（开发阶段 fallback，仅需一次 USB 开 WiFi）
+adb reverse tcp:19090 tcp:8088
 ```
 
 Android debug 包构建命令：
@@ -336,33 +329,38 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 - **中风险** (0.3–0.7)：需确认审批
 - **高风险** (≥0.7 或 blockOnMobile)：仅可在 PC 端审批
 
-## 当前状态 (2026-07-27)
+## 当前状态 (2026-08-11)
 
 | 模块 | 状态 | 说明 |
 |------|------|------|
-| Middleware Core | 已实现 | REST/WS 端点、状态机、风控、审批、通知策略、设备分发、Dashboard 广播、事件历史 |
-| Event Store | 已实现 | 默认内存环形缓冲；`AGENTBRIDGE_EVENT_DB` 启用 SQLite 持久化、`seq`、`last_acked_seq` 和重连补发 |
-| Agent Adapter | 已实现 | `claude-api` / `openai-compatible` / `generic-cli` / `claude-cli` provider 选择，设备动作可 relay 回 agent |
-| Web Dashboard | 已实现 | session 列表、历史事件、实时事件流、事件类型展示 |
-| Mock Device Client | 已实现 | phone/watch/glass/earbuds 四端模拟；ack、replay、approve/reject/continue/pause/view_details 回传 |
-| W3 模拟联调 | 已实现 | `npm run test:w3` 和 `npm run w3:preflight` 覆盖 W3 协议 readiness |
-| Glass App (真实客户端) | 核心闭环已验证 | 6 场景真机验收通过（WS 连接、卡片显示、单击/双击/滑动、断连重连）；TTS 代码已写待真机验证；语音审批待开发 |
-| Phone App (真实客户端) | 待开发 | CXR-L SDK 仅用于 `appUploadAndInstall` / `appStart` 生命周期管理 |
+| Middleware Core | ✅ 已实现 | REST/WS 端点、状态机、风控、审批、通知策略、设备分发、Dashboard 广播、事件历史 |
+| Event Store | ✅ 已实现 | 默认内存环形缓冲；`AGENTBRIDGE_EVENT_DB` 启用 SQLite 持久化、`seq`、`last_acked_seq` 和重连补发 |
+| Agent Adapter | ✅ 已实现 | `claude-api` / `openai-compatible` / `generic-cli` / `claude-cli` provider 选择，设备动作 relay |
+| Web Dashboard | ✅ 已实现 | session 列表、历史事件、实时事件流 |
+| Mock Device Client | ✅ 已实现 | phone/watch/glass/earbuds 四端模拟；ack、replay、action 回传 |
+| Glass App (cxrswithcxrl) | ✅ 12 场景全部通过 | Phase 2 真机验证：WS 连接、3 种卡片、单击/双击/滑动、断连重连、卡片保护、E2E relay、approve→execute、reject、Core 重启恢复 |
+| Phone App (CXRLSample) | 最小化 | CXR-L SDK 仅用于 CustomApp install/start 生命周期 |
 | 认证/安全 | 待开发 | 当前未实现 API key/JWT/设备授权 |
 
-### superpowers 历史计划对照
+### Phase 路线
 
-`docs/superpowers/` 下的 2026-07-26 spec/plan 是历史设计和执行记录，其中大部分核心目标已经落地，但部分文件路径和实现方式被后续实现调整过：
+| Phase | 内容 | 状态 |
+|-------|------|------|
+| Phase 1 | PC only (Core + Adapter + Dashboard + Mock Device) | ✅ 完成 |
+| Phase 2 | 真机联调 / 端到端闭环（眼镜 12 场景） | ✅ 完成 (2026-08-11) |
+| Phase 3a | Claude Code CLI Adapter V2 (真实 Agent 审批闭环) | 📋 Spec + Plan 已完成，待开发 |
+| Phase 3b | 多 Agent 扩展 (Codex, GenericTerminalAdapter) | 🔜 规划中 |
+| Phase 3c | 开源化 (SDK, 协议文档) | 🔜 规划中 |
 
-| 历史目标 | 当前状态 |
-|----------|----------|
-| SQLite 持久化、`seq`、`last_acked_seq`、重连补发 | 已完成；落地在 `middleware-core/internal/store/eventstore.go`，通过 `AGENTBRIDGE_EVENT_DB` 启用 |
-| Claude API 主路径 + CLI fallback | 已完成；同时补了 `openai-compatible` 和 `generic-cli` |
-| Agent Adapter 统一接口与 AgentHub | 已完成 |
-| Mock Device 断连补发/动作回传验证 | 已完成；实际文件是 `mock-device/e2e-replay-action-test.js` 和 `device-session.js` |
-| Phone/Glass 协议对齐 | 仓库内 mock-device 状态层已完成；眼镜端 Kotlin 客户端已按同一协议实现，手机端配置入口后续补齐 |
-| W3 实机闭环 | 仓库内 readiness、preflight 和文档清单已完成；真实设备现场联调仍待执行 |
-| PostgreSQL/Redis、完整认证安全、通用模型 provider runtime | 未作为当前切片实现；保留为后续生产化规划 |
+### 眼镜 WiFi 发现与 LAN 直连 (2026-08-11)
+
+眼镜有完整 WiFi 6 硬件（Qualcomm kiwi_v2, wlan0），连接模式从 ADB 反向隧道改为 LAN 直连：
+- **日常使用：** 眼镜 WiFi → LAN → Core (`ws://192.168.31.209:8088`)，全程无线
+- **WiFiLock：** App 启动时申请 `WIFI_MODE_FULL_HIGH_PERF`，熄屏不掉 WiFi
+- **眼镜重启后：** 需一次 ADB USB 开启 WiFi（已自动化：`scripts/tunnel-watchdog.ps1` + `scripts/deploy-apk.ps1`）
+- **ADB 与 WiFi 独立：** ADB 断连不影响数据通道
+
+详见 CLAUDE.md「眼镜 WiFi 发现与 LAN 直连」章节。
 
 ### CXR-L SDK 联调（设备：华为 NOP_AN00 + Rokid RG-glasses）
 
