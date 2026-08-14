@@ -1,6 +1,8 @@
 # Phase 3a 真机 E2E 修复清单 (2026-08-14)
 
-真机链路 `claude 工具调用 → canUseTool 风控 → needs_approval 卡片 → Core → 眼镜(WiFi LAN) → 手势 → Core → adapter → allow/deny → 工具执行/拒绝` 已跑通，spec §9.3 四场景全部通过。测试中发现 3 个 bug + 1 个可移植性缺口，供 Codex 修复。
+真机链路 `claude 工具调用 → canUseTool 风控 → needs_approval 卡片 → Core → 眼镜(WiFi LAN) → 手势 → Core → adapter → allow/deny → 工具执行/拒绝` 已跑通，spec §9.3 四场景全部通过。
+
+**状态 (2026-08-14 回归后)**：Bug 1–4 已由 Codex 修复（commit `db30e04`）并通过真机回归验证（四场景重跑全部 ✅）。Bug 5 为回归中新发现，待修。
 
 ---
 
@@ -54,3 +56,19 @@
 **现象**: `findWindowsGitBashPath()` 只查 `C:\Program Files\Git\...` 和 `C:\Program Files (x86)\Git\...`。用户 Git 装在 `D:/Software/Git`，自动检测不到，靠手动 `export CLAUDE_CODE_GIT_BASH_PATH="D:/Software/Git/bin/bash.exe"` 绕过。
 
 **修复建议**: 用 `where.exe bash` / `git --exec-path` 动态探测，或至少追加常见非默认路径候选。环境变量覆盖已有，只需让自动检测更可靠。
+
+---
+
+## Bug 5: 状态机 terminal 态不复位（复用 taskID 后卡在 completed）
+
+**文件**: `middleware-core/internal/statemachine/machine.go`
+
+**现象**: task_id 统一为 session 级（`default`）后，同一会话的第二个 turn（新 prompt）复用相同 taskID，但 Core 状态机已停在 `completed`，导致后续所有事件都打 `invalid transition: no transitions defined from state "completed"`。
+
+**根因**: `validTransitions`（第 17–47 行）里 `TaskStateCompleted` 和 `TaskStateFailed` 没有任何 outgoing transition，是 terminal 态。`Transition()` 第 79 行查 `validTransitions[current]` 时 completed 无转换表 → 报错并返回 current。adapter 的模型是「一个 session 一个 taskID、多 turn」，但状态机假设「一个 taskID 一个生命周期」，新 turn 无法 restart。
+
+**后果**: 状态机内部状态追踪失效（`awaiting_approval` 态永远进不去），dashboard 的 `task_state` 一直卡在 completed。**非阻塞**——审批走 `approvalMgr` + `dispatcher`，与状态机独立，approve/reject/分发/回传都正常（回归四场景已证明）。
+
+**修复建议**（二选一）:
+1. **Core 侧（推荐，最小改动）**: 在 `validTransitions` 给 `TaskStateCompleted` 和 `TaskStateFailed` 增加 `EventTaskStarted → TaskStateStarting`，把新 task_started 视为重新开始一个生命周期。
+2. **Adapter 侧**: 每个 turn 生成唯一 taskID（如 `${session}:${Date.now()}`），task_started/needs_approval/task_completed 在同一 turn 内一致、跨 turn 唯一。改动更大，但语义更清晰（「一个 taskID = 一次 turn」）。

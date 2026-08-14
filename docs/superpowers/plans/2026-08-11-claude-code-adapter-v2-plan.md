@@ -634,17 +634,17 @@ export interface ClaudeAdapterOptions {
   claudePath?: string;
   sessionId: string;
   riskThreshold?: number;   // 新增
-  coreTimeoutMs?: number;   // 新增
+  approvalTimeoutMs?: number;   // 新增
 }
 
 constructor(options: ClaudeAdapterOptions) {
   // ... existing fields
   this.riskThreshold = options.riskThreshold ?? DEFAULT_RISK_THRESHOLD;
-  this.coreTimeoutMs = options.coreTimeoutMs ?? 30_000;
+  this.approvalTimeoutMs = options.approvalTimeoutMs ?? 120_000;
 }
 ```
 
-- [ ] **Step 7: 实现 Core 不可用 30s 自动放行**
+- [ ] **Step 7: 实现审批超时 120s 自动放行**
 
 审批暂停后启动超时计时器，Core 不可用时防止 Claude Code 挂死。
 
@@ -653,7 +653,7 @@ constructor(options: ClaudeAdapterOptions) {
 const timeoutId = setTimeout(() => {
   if (this.pendingControl?.requestId === requestId) {
     console.warn(
-      `[ClaudeCodeAdapter] Core unreachable for ${this.coreTimeoutMs}ms, ` +
+      `[ClaudeCodeAdapter] Core unreachable for ${this.approvalTimeoutMs}ms, ` +
       `auto-allowing tool: ${toolName} (risk=${risk})`
     );
     this.writeControlResponse(requestId, 'allow');
@@ -661,7 +661,7 @@ const timeoutId = setTimeout(() => {
     this.pendingControl = null;
     resolve('allow');
   }
-}, this.coreTimeoutMs);
+}, this.approvalTimeoutMs);
 
 // pendingControl 类型新增 timeoutId 字段
 this.pendingControl = {
@@ -986,7 +986,7 @@ git commit -m "test: add mock-claude.sh for integration testing"
 
 - [ ] **Step 1: 调整 ClaudeCodeAdapter 优先级 + 传入配置**
 
-在 `index.ts` 中，将 `ClaudeCodeAdapter` 注册时的优先级调到 `claude-api` 之前，并传入 `riskThreshold` 和 `coreTimeoutMs` 配置。
+在 `index.ts` 中，将 `ClaudeCodeAdapter` 注册时的优先级调到 `claude-api` 之前，并传入 `riskThreshold` 和 `approvalTimeoutMs` 配置。
 
 ```typescript
 // agent-adapter/src/index.ts — 改动点
@@ -1000,7 +1000,7 @@ const claudeCodeAdapter = new ClaudeCodeAdapter({
   sessionId: SESSION_ID,
   claudePath: process.env.CLAUDE_PATH || 'claude',
   riskThreshold: parseFloat(process.env.AGENTBRIDGE_RISK_THRESHOLD || '') || DEFAULT_RISK_THRESHOLD,
-  coreTimeoutMs: parseInt(process.env.AGENTBRIDGE_CORE_TIMEOUT || '120000', 10),
+  approvalTimeoutMs: parseInt(process.env.AGENTBRIDGE_CORE_TIMEOUT || '120000', 10),
 });
 hub.register(claudeCodeAdapter);
 
