@@ -1,5 +1,5 @@
-import { Context, EventType, RawEvent, Severity, UnifiedMessage } from './types';
-import type { AgentEvent } from './adapters/types';
+import type { Context, EventType, RawEvent, Severity, UnifiedMessage } from './types.js';
+import type { AgentEvent } from './adapters/types.js';
 
 /**
  * ClassificationRule defines a single pattern for matching raw agent output.

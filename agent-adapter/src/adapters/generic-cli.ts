@@ -1,7 +1,7 @@
 import { ChildProcess, spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import { createInterface } from 'readline';
-import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types';
+import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types.js';
 
 interface GenericCLIAdapterOptions {
   command?: string;

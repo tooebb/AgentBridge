@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { UnifiedMessage } from './types';
+import type { UnifiedMessage } from './types.js';
 
 export interface AgentBridgeClientOptions {
   /** URL of the middleware core, e.g. 'ws://localhost:8080' */

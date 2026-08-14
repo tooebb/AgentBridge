@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Options, PermissionResult, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { ClaudeCodeAdapter, mapClaudeSDKMessage, type ClaudeQueryFactory } from '../adapters/claude';
+import { ClaudeCodeAdapter, mapClaudeSDKMessage, type ClaudeQueryFactory } from '../adapters/claude.js';
 
 test('mapClaudeSDKMessage converts SDK assistant text and result messages', () => {
   assert.deepEqual(

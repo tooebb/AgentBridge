@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AgentHub } from '../hub';
-import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from '../adapters/types';
+import { AgentHub } from '../hub.js';
+import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from '../adapters/types.js';
 
 test('AgentHub prefers claude-cli by default', async () => {
   const previousClaudePath = process.env.CLAUDE_PATH;

@@ -1,4 +1,4 @@
-import { Context, EventType, RawEvent } from '../types';
+import type { Context, EventType, RawEvent } from '../types.js';
 
 /**
  * ContextEngine maintains a sliding window of recent raw events and provides

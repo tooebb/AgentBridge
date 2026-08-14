@@ -2,8 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { ContentBlockParam, MessageParam, Tool } from '@anthropic-ai/sdk/resources/messages';
 import { exec } from 'child_process';
 import { readFile, writeFile } from 'fs/promises';
-import { assessRisk } from '../risk';
-import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types';
+import { assessRisk } from '../risk.js';
+import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types.js';
 
 interface ClaudeAPIAdapterOptions {
   apiKey?: string;

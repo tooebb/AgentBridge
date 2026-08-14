@@ -1,4 +1,4 @@
-import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types';
+import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types.js';
 
 interface OpenAICompatibleAdapterOptions {
   apiKey?: string;

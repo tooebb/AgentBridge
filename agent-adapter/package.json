@@ -2,12 +2,13 @@
   "name": "agentbridge-adapter",
   "version": "0.1.0",
   "description": "AI Agent cross-device middleware - Agent Adapter (PC side)",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/__tests__/*.js",
+    "test": "npm run build && node --test dist/__tests__/risk.test.js dist/__tests__/claude.test.js dist/__tests__/hub.test.js",
     "start": "node dist/index.js",
-    "dev": "npx ts-node src/index.ts"
+    "dev": "node --loader ts-node/esm src/index.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.232",

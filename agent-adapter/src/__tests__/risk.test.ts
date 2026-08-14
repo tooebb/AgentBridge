@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assessRisk } from '../risk';
+import { assessRisk } from '../risk.js';
 
 test('assessRisk treats read-only tools as safe', () => {
   assert.equal(assessRisk('Read', { path: 'README.md' }), 0);

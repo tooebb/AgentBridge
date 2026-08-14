@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import { existsSync } from 'fs';
 import {
   query,
   type CanUseTool,
@@ -8,8 +9,8 @@ import {
   type Query,
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
-import { assessRisk, DEFAULT_RISK_THRESHOLD } from '../risk';
-import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types';
+import { assessRisk, DEFAULT_RISK_THRESHOLD } from '../risk.js';
+import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types.js';
 
 export interface ClaudeAdapterOptions {
   /** Path to the claude binary. Default: 'claude'. */
@@ -65,7 +66,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
   }
 
   async connect(): Promise<void> {
-    await checkClaudeAvailable(this.claudePath);
+    await checkClaudeAvailable(this.claudePath, claudeRuntimeEnv());
   }
 
   async *send(input: AgentInput): AsyncIterable<AgentEvent> {
@@ -98,7 +99,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
           abortController,
           canUseTool: this.canUseTool,
           cwd: process.cwd(),
-          env: { ...process.env },
+          env: claudeRuntimeEnv(),
           pathToClaudeCodeExecutable: this.claudePath,
           permissionMode: 'default',
         },
@@ -275,11 +276,11 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
   }
 }
 
-function checkClaudeAvailable(claudePath: string): Promise<void> {
+function checkClaudeAvailable(claudePath: string, env: NodeJS.ProcessEnv): Promise<void> {
   return new Promise((resolve, reject) => {
     const probe = spawn(claudePath, ['--version'], {
       stdio: ['ignore', 'ignore', 'pipe'],
-      env: { ...process.env },
+      env,
     });
     let stderr = '';
     probe.stderr?.on('data', (chunk) => {
@@ -296,6 +297,29 @@ function checkClaudeAvailable(claudePath: string): Promise<void> {
       reject(new Error(`Claude Code CLI version probe failed with code ${code}: ${stderr.trim()}`));
     });
   });
+}
+
+function claudeRuntimeEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  if (env.CLAUDE_CODE_GIT_BASH_PATH || process.platform !== 'win32') {
+    return env;
+  }
+
+  const gitBashPath = findWindowsGitBashPath();
+  if (gitBashPath) {
+    env.CLAUDE_CODE_GIT_BASH_PATH = gitBashPath;
+  }
+  return env;
+}
+
+function findWindowsGitBashPath(): string | undefined {
+  const candidates = [
+    'C:\\Program Files\\Git\\bin\\bash.exe',
+    'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
+    'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+    'C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe',
+  ];
+  return candidates.find((candidate) => existsSync(candidate));
 }
 
 export function mapClaudeSDKMessage(message: SDKMessage, taskId: string): AgentEvent | undefined {

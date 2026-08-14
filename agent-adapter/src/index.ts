@@ -7,12 +7,12 @@
  * UnifiedMessages to the Middleware Core via REST.
  */
 
-import { ClaudeCodeAdapter } from './adapters/claude';
-import { GenericCLIAdapter } from './adapters/generic-cli';
-import { AgentHub } from './hub';
-import { AgentBridgeClient } from './ws-client';
-import { EventNormalizer } from './normalizer';
-import type { AgentEvent, AgentInput } from './adapters/types';
+import { ClaudeCodeAdapter } from './adapters/claude.js';
+import { GenericCLIAdapter } from './adapters/generic-cli.js';
+import { AgentHub } from './hub.js';
+import { AgentBridgeClient } from './ws-client.js';
+import { EventNormalizer } from './normalizer.js';
+import type { AgentEvent, AgentInput } from './adapters/types.js';
 
 // ── Configuration (from env vars with sensible defaults) ──
 const SERVER_URL = process.env.AGENTBRIDGE_URL || 'http://localhost:8080';

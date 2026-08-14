@@ -1,8 +1,8 @@
-import { ClaudeCodeAdapter } from './adapters/claude';
-import { ClaudeAPIAdapter } from './adapters/claude-api';
-import { GenericCLIAdapter } from './adapters/generic-cli';
-import { OpenAICompatibleAdapter } from './adapters/openai-compatible';
-import type { AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './adapters/types';
+import { ClaudeCodeAdapter } from './adapters/claude.js';
+import { ClaudeAPIAdapter } from './adapters/claude-api.js';
+import { GenericCLIAdapter } from './adapters/generic-cli.js';
+import { OpenAICompatibleAdapter } from './adapters/openai-compatible.js';
+import type { AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './adapters/types.js';
 
 export class AgentHub {
   private readonly adapters = new Map<string, AgentAdapter>();
