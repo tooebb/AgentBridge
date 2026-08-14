@@ -9,7 +9,7 @@ interface RiskRule {
 const RISK_RULES: RiskRule[] = [
   {
     toolPattern: COMMAND_TOOLS,
-    inputMatch: (args) => /\b(rm\s+-rf|sudo|chmod|chown|mkfs|dd|format|shutdown|reboot)\b/i.test(commandText(args)),
+    inputMatch: (args) => destructiveCommand(commandText(args)),
     risk: 0.9,
   },
   {
@@ -54,4 +54,20 @@ export function assessRisk(toolName: string, toolInput?: Record<string, unknown>
 
 function commandText(args: Record<string, unknown>): string {
   return String(args.command ?? args.cmd ?? '');
+}
+
+function destructiveCommand(command: string): boolean {
+  if (/\b(sudo|chmod|chown|mkfs|dd|format|shutdown|reboot)\b/i.test(command)) {
+    return true;
+  }
+
+  const rmCommand = /\brm\b(?<args>[^;&|]*)/i.exec(command);
+  if (!rmCommand?.groups?.args) {
+    return false;
+  }
+
+  const args = rmCommand.groups.args;
+  return /-[A-Za-z]*r[A-Za-z]*f[A-Za-z]*/.test(args)
+    || /-[A-Za-z]*f[A-Za-z]*r[A-Za-z]*/.test(args)
+    || (/--recursive\b/.test(args) && /--force\b/.test(args));
 }

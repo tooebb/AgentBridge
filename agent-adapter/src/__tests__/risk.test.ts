@@ -10,6 +10,8 @@ test('assessRisk treats read-only tools as safe', () => {
 test('assessRisk escalates command and publish operations', () => {
   assert.equal(assessRisk('Bash', { command: 'git push origin main' }), 0.6);
   assert.equal(assessRisk('run_shell', { command: 'rm -rf /tmp/example' }), 0.9);
+  assert.equal(assessRisk('run_shell', { command: 'rm -fr /tmp/example' }), 0.9);
+  assert.equal(assessRisk('run_shell', { command: 'rm --recursive --force /tmp/example' }), 0.9);
   assert.equal(assessRisk('execute_command', { command: 'git push --force origin main' }), 0.85);
 });
 

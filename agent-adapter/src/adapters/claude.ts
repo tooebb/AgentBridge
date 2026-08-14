@@ -1,8 +1,14 @@
-import { ChildProcess, spawn } from 'child_process';
-import { createInterface } from 'readline';
+import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import {
+  query,
+  type CanUseTool,
+  type Options,
+  type PermissionResult,
+  type Query,
+  type SDKMessage,
+} from '@anthropic-ai/claude-agent-sdk';
 import { assessRisk, DEFAULT_RISK_THRESHOLD } from '../risk';
-import { RawEvent } from '../types';
 import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types';
 
 export interface ClaudeAdapterOptions {
@@ -12,46 +18,48 @@ export interface ClaudeAdapterOptions {
   sessionId: string;
   riskThreshold?: number;
   approvalTimeoutMs?: number;
+  queryFactory?: ClaudeQueryFactory;
 }
 
-type ClaudeStreamEvent = Record<string, any>;
-type ToolPermissionDecision = 'allow' | 'deny';
+export type ClaudeQueryFactory = (params: {
+  prompt: string;
+  options?: Options;
+}) => Query;
 
 interface PendingPermission {
-  requestId: string;
+  taskId: string;
   tool: string;
   input: Record<string, unknown>;
   risk: number;
-  timer: NodeJS.Timeout;
-}
-
-interface RawEventWithAgentEvent extends RawEvent {
-  agentEvent?: AgentEvent;
+  resolve: (decision: PermissionResult) => void;
+  reject: (err: Error) => void;
+  timer: NodeJS.Timeout | null;
 }
 
 /**
- * ClaudeCodeAdapter spawns a Claude Code process and emits structured
- * RawEvents for every line of stdout / stderr output.
+ * ClaudeCodeAdapter drives Claude Code through the Agent SDK.
  *
- * Claude Code is spawned in --print mode with stream-json output format
- * for structured event parsing when available, falling back to plain-text
- * line-by-line processing.
+ * Dynamic tool approval is handled by the SDK canUseTool callback. The raw CLI
+ * stream-json stdin/stdout control protocol is intentionally not used because
+ * it does not expose a real per-tool approval response path.
  */
 export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
   readonly name = 'claude-cli';
   readonly capabilities: AdapterCapability[] = ['file_ops', 'shell_exec', 'code_search', 'conversation'];
 
-  private process: ChildProcess | null = null;
-  private sessionId: string;
-  private claudePath: string;
-  private pendingPermission: PendingPermission | null = null;
+  private readonly sessionId: string;
+  private readonly claudePath: string;
+  private readonly queryFactory: ClaudeQueryFactory;
   private readonly riskThreshold: number;
   private readonly approvalTimeoutMs: number;
+  private pendingPermission: PendingPermission | null = null;
+  private activeQuery: Query | null = null;
 
   constructor(options: ClaudeAdapterOptions) {
     super();
     this.sessionId = options.sessionId;
     this.claudePath = options.claudePath || 'claude';
+    this.queryFactory = options.queryFactory || query;
     this.riskThreshold = options.riskThreshold ?? Number(process.env.AGENTBRIDGE_RISK_THRESHOLD || DEFAULT_RISK_THRESHOLD);
     this.approvalTimeoutMs = options.approvalTimeoutMs ?? Number(process.env.AGENTBRIDGE_CORE_TIMEOUT || 30_000);
   }
@@ -65,40 +73,59 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
       return;
     }
 
+    const taskId = input.taskId || input.sessionId || this.sessionId;
     const queue: AgentEvent[] = [];
     let closed = false;
-    let error: Error | null = null;
     let notify: (() => void) | null = null;
-
     const wake = () => {
       notify?.();
       notify = null;
     };
-    const onEvent = (raw: RawEventWithAgentEvent) => {
-      queue.push(this.rawToAgentEvent(raw));
+    const push = (event: AgentEvent) => {
+      queue.push(event);
       wake();
     };
-    const onClose = () => {
-      closed = true;
-      wake();
-    };
-    const onError = (err: Error) => {
-      error = err;
-      wake();
-    };
+    const onAdapterEvent = (event: AgentEvent) => push(event);
 
-    this.on('event', onEvent);
-    this.once('close', onClose);
-    this.once('error', onError);
+    const abortController = new AbortController();
+    let q: Query | null = null;
 
-    this.start(input.text);
-    yield { type: 'task_started', taskId: input.taskId || input.sessionId || this.sessionId };
-
+    this.on('event', onAdapterEvent);
     try {
-      while (!closed || queue.length > 0) {
-        if (error) {
-          throw error;
+      q = this.queryFactory({
+        prompt: input.text || this.inputFallbackText(input),
+        options: {
+          abortController,
+          canUseTool: this.canUseTool,
+          cwd: process.cwd(),
+          env: { ...process.env },
+          pathToClaudeCodeExecutable: this.claudePath,
+          permissionMode: 'default',
+        },
+      });
+      this.activeQuery = q;
+
+      void (async () => {
+        try {
+          for await (const message of q!) {
+            const event = mapClaudeSDKMessage(message, taskId);
+            if (event) {
+              push(event);
+            }
+          }
+        } catch (err) {
+          push({
+            type: 'task_failed',
+            taskId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        } finally {
+          closed = true;
+          wake();
         }
+      })();
+
+      while (!closed || queue.length > 0) {
         const next = queue.shift();
         if (next) {
           yield next;
@@ -108,199 +135,143 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
           notify = resolve;
         });
       }
+    } catch (err) {
+      yield {
+        type: 'task_failed',
+        taskId,
+        error: err instanceof Error ? err.message : String(err),
+      };
     } finally {
-      this.off('event', onEvent);
-      this.off('close', onClose);
-      this.off('error', onError);
+      this.clearPendingPermission();
+      this.off('event', onAdapterEvent);
+      if (q && this.activeQuery === q) {
+        this.activeQuery = null;
+      }
+      abortController.abort();
     }
   }
 
   async handleUserAction(action: DeviceAction): Promise<void> {
-    if (this.pendingPermission && (!action.taskId || action.taskId === this.pendingPermission.requestId)) {
-      const approved = action.type === 'approve' || action.type === 'continue';
-      this.resolvePendingPermission(approved ? 'allow' : 'deny', 'device_action');
+    if (!this.pendingPermission) {
       this.emit('action_sent', { actionType: action.type, taskId: action.taskId || this.sessionId });
       return;
     }
 
-    this.sendAction(action.type, action.taskId || this.sessionId);
+    const pending = this.pendingPermission;
+    if (action.taskId && action.taskId !== pending.taskId) {
+      this.emit('action_sent', { actionType: action.type, taskId: action.taskId });
+      return;
+    }
+
+    if (action.type === 'approve' || action.type === 'continue') {
+      this.resolvePendingPermission({
+        behavior: 'allow',
+        updatedInput: pending.input,
+      });
+      this.emit('action_sent', { actionType: action.type, taskId: pending.taskId });
+      return;
+    }
+
+    if (action.type === 'reject') {
+      this.resolvePendingPermission({
+        behavior: 'deny',
+        message: `Rejected by the user from the connected device: ${pending.tool}`,
+      });
+      this.emit('action_sent', { actionType: action.type, taskId: pending.taskId });
+      return;
+    }
+
+    this.emit('action_sent', { actionType: action.type, taskId: pending.taskId });
   }
 
   async disconnect(): Promise<void> {
-    await this.stop();
+    this.clearPendingPermission(new Error('Claude Code adapter disconnected'));
+    this.activeQuery?.close();
+    this.activeQuery = null;
   }
 
-  /** Launch Claude Code and begin capturing output. */
-  start(prompt?: string): void {
-    const args = [
-      '--print',
-      '--verbose',
-      '--output-format', 'stream-json',
-      '--input-format', 'stream-json',
-      '--permission-mode', 'default',
-    ];
-    if (prompt) {
-      args.push('-p', prompt);
-    }
-
-    this.process = spawn(this.claudePath, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
-
-    // stdout: structured JSON or plain text.
-    const stdout = createInterface({ input: this.process.stdout! });
-    stdout.on('line', (line: string) => {
-      this.emitEvent(line.trim(), 'stdout');
-    });
-
-    // stderr: error output.
-    const stderr = createInterface({ input: this.process.stderr! });
-    stderr.on('line', (line: string) => {
-      this.emitEvent(line.trim(), 'stderr');
-    });
-
-    this.process.on('error', (err) => {
-      this.emit('error', err);
-    });
-
-    this.process.on('close', (code) => {
-      this.clearPendingPermission();
-      if (code !== 0) {
-        this.emitEvent(
-          `Claude Code exited with code ${code}`,
-          'hook'
-        );
-      }
-      this.emit('close', code);
-    });
-
-    // Prompt is passed through -p in print mode; stdin is reserved for JSON control responses.
-  }
-
-  /**
-   * Send a user action back to Claude Code via stdin.
-   * Stream-json mode expects JSON lines on stdin.
-   */
-  sendAction(actionType: string, taskId: string): void {
-    if (!this.process?.stdin?.writable) {
-      this.emit('error', new Error('Cannot send action: process stdin not writable'));
-      return;
-    }
-
-    const messages: Record<string, unknown> = {
-      approve: { type: 'user', message: { role: 'user', content: 'Approved. Continue.' } },
-      reject: { type: 'user', message: { role: 'user', content: 'Rejected. Stop this action and propose a safer alternative.' } },
-      continue: { type: 'user', message: { role: 'user', content: 'Continue.' } },
-      pause: { type: 'user', message: { role: 'user', content: 'Pause and wait for further instructions.' } },
-      view_details: { type: 'user', message: { role: 'user', content: 'Show more details about the current task.' } },
-    };
-
-    const msg = messages[actionType] || { type: 'user', message: { role: 'user', content: actionType } };
-    this.process.stdin.write(JSON.stringify(msg) + '\n');
-    this.emit('action_sent', { actionType, taskId });
-  }
-
-  /** Kill the Claude Code process. */
-  async stop(): Promise<void> {
-    this.clearPendingPermission();
-    if (this.process) {
-      this.process.kill('SIGTERM');
-      this.process = null;
-    }
-  }
-
-  private emitEvent(rawOutput: string, source: 'stdout' | 'stderr' | 'hook'): void {
-    if (!rawOutput) return;
-
-    let agentEvent: AgentEvent | undefined;
-    // Try to parse as stream-json for richer metadata.
-    try {
-      const parsed = JSON.parse(rawOutput);
-      agentEvent = this.handleClaudeStreamJsonEvent(parsed);
-      if (parsed.event || parsed.type) {
-        rawOutput = parsed.text || parsed.message || rawOutput;
-      }
-    } catch {
-      // Not JSON - use raw text directly. This is the common case.
-    }
-
-    const event: RawEventWithAgentEvent = {
-      agentId: 'claude-code',
-      sessionId: this.sessionId,
-      timestamp: Date.now(),
-      rawOutput,
-      source,
-      agentEvent,
-    };
-
-    this.emit('event', event);
-  }
-
-  private handleClaudeStreamJsonEvent(event: ClaudeStreamEvent): AgentEvent | undefined {
-    const eventType = event.type || event.event;
-    if (eventType !== 'control' || controlType(event) !== 'tool_permission') {
-      return parseClaudeStreamJsonEvent(event);
-    }
-
-    const requestId = permissionRequestId(event);
-    const tool = toolName(event);
-    const input = toolInput(event);
-    const risk = assessRisk(tool, input);
-
+  private readonly canUseTool: CanUseTool = async (toolName, input, options) => {
+    const risk = assessRisk(toolName, input);
     if (risk < this.riskThreshold) {
-      this.writeToolPermissionDecision(requestId, 'allow');
-      return { type: 'tool_call', tool, args: input };
+      return { behavior: 'allow', updatedInput: input };
     }
 
-    this.setPendingPermission({ requestId, tool, input, risk });
-    return { type: 'needs_approval', tool, risk, taskId: requestId };
-  }
+    return new Promise<PermissionResult>((resolve, reject) => {
+      const taskId = options.requestId || options.toolUseID || `${this.sessionId}:${Date.now()}`;
+      this.clearPendingPermission();
 
-  private setPendingPermission(permission: Omit<PendingPermission, 'timer'>): void {
-    this.clearPendingPermission();
-    const timer = setTimeout(() => {
-      if (!this.pendingPermission || this.pendingPermission.requestId !== permission.requestId) {
-        return;
-      }
-      this.emitEvent(`Approval timed out after ${this.approvalTimeoutMs}ms; auto-allowing ${permission.tool}`, 'hook');
-      this.resolvePendingPermission('allow', 'timeout');
-    }, this.approvalTimeoutMs);
-    this.pendingPermission = { ...permission, timer };
-  }
+      const timer = this.approvalTimeoutMs > 0
+        ? setTimeout(() => {
+            if (!this.pendingPermission || this.pendingPermission.taskId !== taskId) {
+              return;
+            }
+            this.emit('event', {
+              type: 'text',
+              content: `[ClaudeCodeAdapter] approval timed out after ${this.approvalTimeoutMs}ms; auto-allowing ${toolName}`,
+            } satisfies AgentEvent);
+            this.resolvePendingPermission({ behavior: 'allow', updatedInput: input });
+          }, this.approvalTimeoutMs)
+        : null;
 
-  private resolvePendingPermission(decision: ToolPermissionDecision, reason: string): void {
+      this.pendingPermission = {
+        taskId,
+        tool: toolName,
+        input,
+        risk,
+        resolve,
+        reject,
+        timer,
+      };
+
+      options.signal.addEventListener('abort', () => {
+        if (!this.pendingPermission || this.pendingPermission.taskId !== taskId) {
+          return;
+        }
+        this.clearPendingPermission(new Error(`Permission request aborted for ${toolName}`));
+      }, { once: true });
+
+      this.emit('event', {
+        type: 'needs_approval',
+        tool: toolName,
+        risk,
+        taskId,
+      } satisfies AgentEvent);
+    });
+  };
+
+  private resolvePendingPermission(decision: PermissionResult): void {
     if (!this.pendingPermission) {
       return;
     }
-    const requestId = this.pendingPermission.requestId;
-    this.clearPendingPermission();
-    this.writeToolPermissionDecision(requestId, decision, reason);
+
+    const pending = this.pendingPermission;
+    this.pendingPermission = null;
+    if (pending.timer) {
+      clearTimeout(pending.timer);
+    }
+    pending.resolve(decision);
   }
 
-  private writeToolPermissionDecision(requestId: string, decision: ToolPermissionDecision, reason?: string): void {
-    if (!this.process?.stdin?.writable) {
-      this.emit('error', new Error('Cannot send tool permission: process stdin not writable'));
+  private clearPendingPermission(err?: Error): void {
+    if (!this.pendingPermission) {
       return;
     }
-    this.process.stdin.write(JSON.stringify(buildToolPermissionDecision(requestId, decision, reason)) + '\n');
-  }
 
-  private clearPendingPermission(): void {
-    if (this.pendingPermission) {
-      clearTimeout(this.pendingPermission.timer);
-    }
+    const pending = this.pendingPermission;
     this.pendingPermission = null;
+    if (pending.timer) {
+      clearTimeout(pending.timer);
+    }
+    if (err) {
+      pending.reject(err);
+    }
   }
 
-  private rawToAgentEvent(raw: RawEventWithAgentEvent): AgentEvent {
-    if (raw.agentEvent) {
-      return raw.agentEvent;
-    }
-    if (raw.source === 'stderr') {
-      return { type: 'task_failed', taskId: this.sessionId, error: raw.rawOutput };
-    }
-    return { type: 'text', content: raw.rawOutput };
+  private inputFallbackText(input: AgentInput): string {
+    if (input.action?.text) return input.action.text;
+    if (input.action?.type) return `Device action received: ${input.action.type}. Continue.`;
+    if (input.type === 'start_task') return 'Start the task.';
+    return 'Continue.';
   }
 }
 
@@ -327,108 +298,70 @@ function checkClaudeAvailable(claudePath: string): Promise<void> {
   });
 }
 
-export function parseClaudeStreamJsonEvent(event: ClaudeStreamEvent): AgentEvent | undefined {
-  const eventType = event.type || event.event;
+export function mapClaudeSDKMessage(message: SDKMessage, taskId: string): AgentEvent | undefined {
+  if (message.type === 'system' && message.subtype === 'init') {
+    return { type: 'task_started', taskId: message.session_id || taskId };
+  }
 
-  if (eventType === 'control' && controlType(event) === 'tool_permission') {
-    const tool = toolName(event);
-    const input = toolInput(event);
-    const risk = assessRisk(tool, input);
+  if (message.type === 'assistant') {
+    const content = assistantText(message.message.content);
+    return content ? { type: 'text', content } : undefined;
+  }
+
+  if (message.type === 'result') {
+    if (message.is_error) {
+      return {
+        type: 'task_failed',
+        taskId: message.session_id || taskId,
+        error: resultText(message) || 'Claude Code task failed',
+      };
+    }
+
     return {
-      type: 'needs_approval',
-      tool,
-      risk,
-      taskId: permissionRequestId(event),
+      type: 'task_completed',
+      taskId: message.session_id || taskId,
+      summary: resultText(message) || 'Claude Code task completed',
     };
-  }
-
-  if (eventType === 'assistant') {
-    const content = assistantText(event);
-    return content ? { type: 'text', content } : undefined;
-  }
-
-  if (eventType === 'result') {
-    const summary = typeof event.result === 'string'
-      ? event.result
-      : typeof event.text === 'string'
-        ? event.text
-        : 'Claude Code task completed';
-    return { type: 'task_completed', taskId: event.task_id || event.session_id || 'claude-code', summary };
-  }
-
-  if (eventType === 'system') {
-    const content = typeof event.text === 'string' ? event.text : undefined;
-    return content ? { type: 'text', content } : undefined;
   }
 
   return undefined;
 }
 
-function controlType(event: ClaudeStreamEvent): string | undefined {
-  return event.control?.control_type
-    || event.control?.type
-    || event.control?.subtype
-    || event.control_type
-    || event.subtype;
-}
-
-function permissionRequestId(event: ClaudeStreamEvent): string {
-  return event.request_id
-    || event.control?.request_id
-    || event.task_id
-    || event.session_id
-    || event.control?.id
-    || 'claude-code';
-}
-
-function toolName(event: ClaudeStreamEvent): string {
-  return event.control?.tool_name
-    || event.control?.toolName
-    || event.control?.name
-    || event.tool_name
-    || event.toolName
-    || event.name
-    || 'unknown';
-}
-
-function toolInput(event: ClaudeStreamEvent): Record<string, unknown> {
-  return event.control?.tool_input
-    || event.control?.input
-    || event.control?.arguments
-    || event.tool_input
-    || event.input
-    || event.arguments
-    || {};
-}
-
-export function buildToolPermissionDecision(requestId: string, decision: ToolPermissionDecision, reason?: string): Record<string, unknown> {
-  return {
-    type: 'control',
-    control_type: 'tool_permission',
-    request_id: requestId,
-    decision,
-    ...(reason ? { reason } : {}),
-  };
-}
-
-function assistantText(event: ClaudeStreamEvent): string | undefined {
-  if (typeof event.text === 'string') return event.text;
-  if (typeof event.message === 'string') return event.message;
-  if (event.message && typeof event.message === 'object' && 'content' in event.message) {
-    const content = event.message.content;
-    if (typeof content === 'string') return content;
-    if (Array.isArray(content)) {
-      return content
-        .map((part) => {
-          if (typeof part === 'string') return part;
-          if (part && typeof part === 'object' && 'text' in part) {
-            return String(part.text);
-          }
-          return '';
-        })
-        .filter(Boolean)
-        .join('\n');
-    }
+function assistantText(content: unknown): string | undefined {
+  if (typeof content === 'string') {
+    return content;
   }
+
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const text = content
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part === 'object' && 'type' in part && part.type === 'text' && 'text' in part) {
+        return String(part.text);
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  return text || undefined;
+}
+
+function resultText(message: SDKMessage): string | undefined {
+  if (message.type !== 'result') {
+    return undefined;
+  }
+
+  if ('result' in message && typeof message.result === 'string') {
+    return message.result;
+  }
+
+  if ('errors' in message && Array.isArray(message.errors)) {
+    return message.errors.join('\n') || undefined;
+  }
+
   return undefined;
 }
