@@ -16,7 +16,7 @@
 - `--input-format stream-json` 标志需实现时验证，不存在则降级为仅输出流 + stdin 文本协议
 - `--permission-mode default` 需确保工具调用走 control 协议
 - 风控阈值 `AGENTBRIDGE_RISK_THRESHOLD`，默认 0.3
-- Core 不可用时 30s 自动放行（`AGENTBRIDGE_CORE_TIMEOUT`）
+- Core 不可用时默认 120s 自动放行（`AGENTBRIDGE_CORE_TIMEOUT`）
 
 ## Entry Criteria（准入条件 — 以下必须全部通过才能开工）
 
@@ -1000,7 +1000,7 @@ const claudeCodeAdapter = new ClaudeCodeAdapter({
   sessionId: SESSION_ID,
   claudePath: process.env.CLAUDE_PATH || 'claude',
   riskThreshold: parseFloat(process.env.AGENTBRIDGE_RISK_THRESHOLD || '') || DEFAULT_RISK_THRESHOLD,
-  coreTimeoutMs: parseInt(process.env.AGENTBRIDGE_CORE_TIMEOUT || '30000', 10),
+  coreTimeoutMs: parseInt(process.env.AGENTBRIDGE_CORE_TIMEOUT || '120000', 10),
 });
 hub.register(claudeCodeAdapter);
 

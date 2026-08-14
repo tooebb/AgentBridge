@@ -153,11 +153,16 @@ npm run dev
 # Dashboard 可实时看到事件流
 ```
 
-Agent Adapter 默认按 `claude-api` → `openai-compatible` → `generic-cli` → `claude-cli` 顺序选择可用适配器，也可以通过 `AGENTBRIDGE_AGENT` 指定：
+Agent Adapter 默认按 `claude-cli` → `claude-api` → `openai-compatible` → `generic-cli` 顺序选择可用适配器，也可以通过 `AGENTBRIDGE_AGENT` 指定：
 
 ```bash
 # Claude API
 ANTHROPIC_API_KEY=... AGENTBRIDGE_AGENT=claude-api npm run dev
+
+# Claude Code CLI Adapter V2（真机联调建议显式设置 120s 审批超时）
+AGENTBRIDGE_AGENT=claude-cli \
+AGENTBRIDGE_CORE_TIMEOUT=120000 \
+npm run dev
 
 # Claude Code / ccswitch / 其他兼容 CLI 包装器
 AGENTBRIDGE_AGENT=generic-cli \

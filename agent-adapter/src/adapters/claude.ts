@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import { existsSync } from 'fs';
 import {
@@ -55,6 +55,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
   private readonly approvalTimeoutMs: number;
   private pendingPermission: PendingPermission | null = null;
   private activeQuery: Query | null = null;
+  private currentTaskId: string | null = null;
 
   constructor(options: ClaudeAdapterOptions) {
     super();
@@ -62,7 +63,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
     this.claudePath = options.claudePath || 'claude';
     this.queryFactory = options.queryFactory || query;
     this.riskThreshold = options.riskThreshold ?? Number(process.env.AGENTBRIDGE_RISK_THRESHOLD || DEFAULT_RISK_THRESHOLD);
-    this.approvalTimeoutMs = options.approvalTimeoutMs ?? Number(process.env.AGENTBRIDGE_CORE_TIMEOUT || 30_000);
+    this.approvalTimeoutMs = options.approvalTimeoutMs ?? Number(process.env.AGENTBRIDGE_CORE_TIMEOUT || 120_000);
   }
 
   async connect(): Promise<void> {
@@ -75,6 +76,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
     }
 
     const taskId = input.taskId || input.sessionId || this.sessionId;
+    this.currentTaskId = taskId;
     const queue: AgentEvent[] = [];
     let closed = false;
     let notify: (() => void) | null = null;
@@ -148,6 +150,9 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
       if (q && this.activeQuery === q) {
         this.activeQuery = null;
       }
+      if (this.currentTaskId === taskId) {
+        this.currentTaskId = null;
+      }
       abortController.abort();
     }
   }
@@ -198,7 +203,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
     }
 
     return new Promise<PermissionResult>((resolve, reject) => {
-      const taskId = options.requestId || options.toolUseID || `${this.sessionId}:${Date.now()}`;
+      const taskId = this.currentTaskId || this.sessionId;
       this.clearPendingPermission();
 
       const timer = this.approvalTimeoutMs > 0
@@ -236,6 +241,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
         tool: toolName,
         risk,
         taskId,
+        input,
       } satisfies AgentEvent);
     });
   };
@@ -313,18 +319,53 @@ function claudeRuntimeEnv(): NodeJS.ProcessEnv {
 }
 
 function findWindowsGitBashPath(): string | undefined {
+  const gitExecPath = commandOutputLines('git', ['--exec-path'])[0];
+  if (gitExecPath) {
+    const gitRoot = gitExecPath.replace(/[\\/]mingw\d+[\\/]libexec[\\/]git-core$/i, '');
+    const candidatesFromGit = [
+      `${gitRoot}\\bin\\bash.exe`,
+      `${gitRoot}\\usr\\bin\\bash.exe`,
+    ];
+    const fromGit = candidatesFromGit.find((candidate) => existsSync(candidate));
+    if (fromGit) {
+      return fromGit;
+    }
+  }
+
+  const whereBash = commandOutputLines('where.exe', ['bash'])
+    .find((candidate) => /[\\/]Git[\\/].*[\\/]bash\.exe$/i.test(candidate) && existsSync(candidate));
+  if (whereBash) {
+    return whereBash;
+  }
+
   const candidates = [
     'C:\\Program Files\\Git\\bin\\bash.exe',
     'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
     'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
     'C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe',
+    'D:\\Software\\Git\\bin\\bash.exe',
+    'D:\\Software\\Git\\usr\\bin\\bash.exe',
+    'D:\\Program Files\\Git\\bin\\bash.exe',
+    'D:\\Program Files\\Git\\usr\\bin\\bash.exe',
   ];
   return candidates.find((candidate) => existsSync(candidate));
 }
 
+function commandOutputLines(command: string, args: string[]): string[] {
+  try {
+    const output = execFileSync(command, args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export function mapClaudeSDKMessage(message: SDKMessage, taskId: string): AgentEvent | undefined {
   if (message.type === 'system' && message.subtype === 'init') {
-    return { type: 'task_started', taskId: message.session_id || taskId };
+    return { type: 'task_started', taskId };
   }
 
   if (message.type === 'assistant') {
@@ -336,14 +377,14 @@ export function mapClaudeSDKMessage(message: SDKMessage, taskId: string): AgentE
     if (message.is_error) {
       return {
         type: 'task_failed',
-        taskId: message.session_id || taskId,
+        taskId,
         error: resultText(message) || 'Claude Code task failed',
       };
     }
 
     return {
       type: 'task_completed',
-      taskId: message.session_id || taskId,
+      taskId,
       summary: resultText(message) || 'Claude Code task completed',
     };
   }

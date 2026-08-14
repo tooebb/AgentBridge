@@ -304,18 +304,18 @@ RUNNING → DONE (result 消息或 query 结束)
 
 | 场景 | 行为 |
 |------|------|
-| 眼镜断连 | pending Promise 由超时兜底（默认 30s auto-allow）。`AGENTBRIDGE_CORE_TIMEOUT=0` 可禁用超时改为无限等待。 |
+| 眼镜断连 | pending Promise 由超时兜底（默认 120s auto-allow）。`AGENTBRIDGE_CORE_TIMEOUT=0` 可禁用超时改为无限等待。 |
 | Core 重启 | `AgentBridgeClient` 自动重连（指数退避 2-30s），重连后 `last_acked_seq` 回放事件。adapter 本身不受影响——query 继续运行。 |
 | Adapter 进程 crash | Claude Code 子进程随 SDK 关闭被 OS 清理。用户重新 `npm run dev` 即可。 |
 | Claude Code 进程 crash | SDK `query()` 异常/结束 → yield `task_failed` → adapter 清理 pending 状态。 |
-| Adapter/Core 刚启动，Claude Code 已触发 canUseTool | 高风险工具挂起 pending，等待 Core 连接完成后发送 `needs_approval`。Core 长时间不可用（> 30s）→ 超时 auto-allow 防挂死。 |
+| Adapter/Core 刚启动，Claude Code 已触发 canUseTool | 高风险工具挂起 pending，等待 Core 连接完成后发送 `needs_approval`。Core 长时间不可用（> 120s）→ 超时 auto-allow 防挂死。 |
 
 ### 5.1 Core 不可用时的降级策略
 
-`canUseTool` 挂起时启动 `AGENTBRIDGE_CORE_TIMEOUT`（默认 30000ms）定时器。若设备动作未在超时前返回（Core 不可达、HTTP 错误、眼镜断连、用户无操作），adapter **不**无限等待——超时后 `resolve({ behavior:'allow' })` 自动放行并记录 WARN：
+`canUseTool` 挂起时启动 `AGENTBRIDGE_CORE_TIMEOUT`（默认 120000ms）定时器。若设备动作未在超时前返回（Core 不可达、HTTP 错误、眼镜断连、用户无操作），adapter **不**无限等待——超时后 `resolve({ behavior:'allow' })` 自动放行并记录 WARN：
 
 ```
-[ClaudeCodeAdapter] approval timed out after 30000ms, auto-allowing tool: Write (risk=0.4)
+[ClaudeCodeAdapter] approval timed out after 120000ms, auto-allowing tool: Write (risk=0.4)
 ```
 
 这样确保用户不会因为 Core 挂了而丢失 Claude Code 会话。`AGENTBRIDGE_CORE_TIMEOUT=0` 表示禁用超时、无限等待（适用于需要强审批保证的场景）。
@@ -332,7 +332,7 @@ RUNNING → DONE (result 消息或 query 结束)
 | `AGENTBRIDGE_SESSION` | `default` | 会话 ID |
 | `AGENTBRIDGE_PROMPT` | — | 初始 prompt |
 | `AGENTBRIDGE_RISK_THRESHOLD` | `0.3` | 审批触发阈值（0 = 全部审批，1 = 全部放行） |
-| `AGENTBRIDGE_CORE_TIMEOUT` | `30000` | 审批超时自动放行等待时间（ms）；`0` = 禁用超时、无限等待 |
+| `AGENTBRIDGE_CORE_TIMEOUT` | `120000` | 审批超时自动放行等待时间（ms）；`0` = 禁用超时、无限等待；真机联调建议显式设置为 `120000` |
 
 ---
 

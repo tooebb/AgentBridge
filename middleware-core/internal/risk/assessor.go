@@ -116,6 +116,10 @@ func NewAssessor(rules []Rule) *Assessor {
 // Evaluate runs all rules against a message and returns the cumulative risk score
 // and whether the action should be blocked on mobile devices.
 func (a *Assessor) Evaluate(msg *domain.UnifiedMessage) (score float64, blocked bool) {
+	if msg.RiskScore > 0 {
+		return msg.RiskScore, msg.RiskBlocked || msg.RiskScore >= 0.7
+	}
+
 	for _, rule := range a.rules {
 		if rule.Match(msg) {
 			score += rule.Score

@@ -21,7 +21,7 @@ test('mapClaudeSDKMessage converts SDK assistant text and result messages', () =
       result: 'done',
       session_id: 'session-1',
     } as SDKMessage, 'task-1'),
-    { type: 'task_completed', taskId: 'session-1', summary: 'done' }
+    { type: 'task_completed', taskId: 'task-1', summary: 'done' }
   );
 
   assert.deepEqual(
@@ -32,7 +32,7 @@ test('mapClaudeSDKMessage converts SDK assistant text and result messages', () =
       errors: ['failed'],
       session_id: 'session-1',
     } as SDKMessage, 'task-1'),
-    { type: 'task_failed', taskId: 'session-1', error: 'failed' }
+    { type: 'task_failed', taskId: 'task-1', error: 'failed' }
   );
 });
 
@@ -50,9 +50,15 @@ test('ClaudeCodeAdapter emits needs_approval and resolves approve to SDK allow',
   const iter = adapter.send({ type: 'start_task', text: 'write file', sessionId: 'session-1' })[Symbol.asyncIterator]();
 
   assert.deepEqual(await nextValue(iter), { type: 'task_started', taskId: 'session-1' });
-  assert.deepEqual(await nextValue(iter), { type: 'needs_approval', tool: 'Write', risk: 0.4, taskId: 'req-1' });
+  assert.deepEqual(await nextValue(iter), {
+    type: 'needs_approval',
+    tool: 'Write',
+    risk: 0.4,
+    taskId: 'session-1',
+    input: { file_path: 'hello.txt' },
+  });
 
-  await adapter.handleUserAction({ type: 'approve', taskId: 'req-1', deviceType: 'glasses' });
+  await adapter.handleUserAction({ type: 'approve', taskId: 'session-1', deviceType: 'glasses' });
 
   assert.deepEqual(await nextValue(iter), { type: 'task_completed', taskId: 'session-1', summary: 'wrote file' });
   assert.deepEqual(decisions, [{ behavior: 'allow', updatedInput: { file_path: 'hello.txt' } }]);
@@ -71,8 +77,14 @@ test('ClaudeCodeAdapter resolves reject to SDK deny', async () => {
 
   const iter = adapter.send({ type: 'start_task', text: 'push', sessionId: 'session-1' })[Symbol.asyncIterator]();
 
-  assert.deepEqual(await nextValue(iter), { type: 'needs_approval', tool: 'Bash', risk: 0.6, taskId: 'req-2' });
-  await adapter.handleUserAction({ type: 'reject', taskId: 'req-2', deviceType: 'glasses' });
+  assert.deepEqual(await nextValue(iter), {
+    type: 'needs_approval',
+    tool: 'Bash',
+    risk: 0.6,
+    taskId: 'session-1',
+    input: { command: 'git push origin main' },
+  });
+  await adapter.handleUserAction({ type: 'reject', taskId: 'session-1', deviceType: 'glasses' });
 
   assert.deepEqual(await nextValue(iter), { type: 'task_completed', taskId: 'session-1', summary: 'rejected safely' });
   assert.equal(decisions[0]?.behavior, 'deny');
@@ -91,14 +103,20 @@ test('ClaudeCodeAdapter leaves view_details pending until a decision arrives', a
 
   const iter = adapter.send({ type: 'start_task', text: 'write file', sessionId: 'session-1' })[Symbol.asyncIterator]();
 
-  assert.deepEqual(await nextValue(iter), { type: 'needs_approval', tool: 'Write', risk: 0.4, taskId: 'req-3' });
-  await adapter.handleUserAction({ type: 'view_details', taskId: 'req-3', deviceType: 'glasses' });
+  assert.deepEqual(await nextValue(iter), {
+    type: 'needs_approval',
+    tool: 'Write',
+    risk: 0.4,
+    taskId: 'session-1',
+    input: { file_path: 'hello.txt' },
+  });
+  await adapter.handleUserAction({ type: 'view_details', taskId: 'session-1', deviceType: 'glasses' });
 
   assert.equal(decisions.length, 0);
   const pendingNext = iter.next();
   assert.equal(await settlesWithin(pendingNext, 20), false);
 
-  await adapter.handleUserAction({ type: 'continue', taskId: 'req-3', deviceType: 'glasses' });
+  await adapter.handleUserAction({ type: 'continue', taskId: 'session-1', deviceType: 'glasses' });
   const resumed = await pendingNext;
   assert.equal(resumed.done, false);
   assert.equal(resumed.value.type, 'task_completed');
@@ -118,7 +136,13 @@ test('ClaudeCodeAdapter auto-allows pending permissions after timeout', async ()
 
   const iter = adapter.send({ type: 'start_task', text: 'write file', sessionId: 'session-1' })[Symbol.asyncIterator]();
 
-  assert.deepEqual(await nextValue(iter), { type: 'needs_approval', tool: 'Write', risk: 0.4, taskId: 'req-4' });
+  assert.deepEqual(await nextValue(iter), {
+    type: 'needs_approval',
+    tool: 'Write',
+    risk: 0.4,
+    taskId: 'session-1',
+    input: { file_path: 'hello.txt' },
+  });
   assert.equal((await nextValue(iter)).type, 'text');
   assert.deepEqual(decisions, [{ behavior: 'allow', updatedInput: { file_path: 'hello.txt' } }]);
   assert.deepEqual(await nextValue(iter), { type: 'task_completed', taskId: 'session-1', summary: 'done after timeout' });
