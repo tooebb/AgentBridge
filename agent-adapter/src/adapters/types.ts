@@ -29,7 +29,7 @@ export interface DeviceAction {
 export type AgentEvent =
   | { type: 'text'; content: string }
   | { type: 'tool_call'; tool: string; args: unknown }
-  | { type: 'needs_approval'; tool: string; risk: number; taskId?: string; input?: Record<string, unknown> }
+  | { type: 'needs_approval'; tool: string; risk: number; taskId?: string; input?: Record<string, unknown>; reasoning?: string }
   | { type: 'task_started'; taskId: string }
   | { type: 'task_completed'; taskId: string; summary: string }
   | { type: 'task_failed'; taskId: string; error: string }

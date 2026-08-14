@@ -24,6 +24,7 @@ export interface UnifiedMessage {
   event_type: EventType;
   title: string;
   body: string;
+  details?: string;
   severity: Severity;
   risk_score: number;
   risk_blocked: boolean;

@@ -147,6 +147,7 @@ export class EventNormalizer {
       event_type: eventType,
       title,
       body,
+      details: event.type === 'needs_approval' ? approvalDetails(event) : '',
       severity,
       risk_score: 'risk' in event ? event.risk : 0,
       risk_blocked: false,
@@ -288,6 +289,21 @@ export class EventNormalizer {
 
 function approvalBody(event: Extract<AgentEvent, { type: 'needs_approval' }>): string {
   const lines = [`Risk score: ${event.risk}`];
+  const command = event.input && 'command' in event.input ? String(event.input.command) : '';
+  if (command) {
+    lines.push(`Command: ${command}`);
+  }
+  if (event.input && Object.keys(event.input).length > 0) {
+    lines.push(`Tool input: ${JSON.stringify(event.input)}`);
+  }
+  return lines.join('\n');
+}
+
+function approvalDetails(event: Extract<AgentEvent, { type: 'needs_approval' }>): string {
+  const lines: string[] = [];
+  if (event.reasoning) {
+    lines.push(event.reasoning);
+  }
   const command = event.input && 'command' in event.input ? String(event.input.command) : '';
   if (command) {
     lines.push(`Command: ${command}`);

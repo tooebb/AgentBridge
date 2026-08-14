@@ -120,6 +120,36 @@ func TestForGlass_NeedsApproval_RiskScoreDisplay(t *testing.T) {
 	}
 }
 
+func TestForGlass_NeedsApproval_PopulatesCardDetails(t *testing.T) {
+	d := NewDispatcher()
+	actions := []domain.AvailableAction{
+		{ActionType: "approve", Label: "Approve"},
+		{ActionType: "reject", Label: "Reject"},
+	}
+	msg := newMsg(domain.EventNeedsApproval, "Approval required: Write", "Risk score: 0.4\nCommand: rm foo\nTool input: {...}", domain.SeverityWarning, 0.4, actions)
+	msg.Details = "I will remove foo\nCommand: rm foo\nTool input: {\"command\":\"rm foo\"}"
+
+	out := d.forGlass(msg)
+
+	if out.CardDetails != msg.Details {
+		t.Errorf("CardDetails = %q, want %q", out.CardDetails, msg.Details)
+	}
+	if contains(out.CardBody, "Command:") {
+		t.Errorf("CardBody = %q, should stay a short summary (no Command line)", out.CardBody)
+	}
+}
+
+func TestForGlass_NeedsApproval_CardDetailsFallsBackToBody(t *testing.T) {
+	d := NewDispatcher()
+	msg := newMsg(domain.EventNeedsApproval, "Op", "Do something", domain.SeverityWarning, 0.3, nil)
+
+	out := d.forGlass(msg)
+
+	if out.CardDetails == "" {
+		t.Error("CardDetails should fall back to Body when Details is empty")
+	}
+}
+
 func TestForGlass_NeedsApproval_FallbackActions(t *testing.T) {
 	d := NewDispatcher()
 	msg := newMsg(domain.EventNeedsApproval, "Approve", "Please approve", domain.SeverityWarning, 0, nil)

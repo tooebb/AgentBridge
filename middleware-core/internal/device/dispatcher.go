@@ -122,11 +122,16 @@ func (d *Dispatcher) glassNeedsApproval(msg *domain.UnifiedMessage) *domain.Devi
 	if msg.RiskScore > 0 {
 		riskLine = fmt.Sprintf("风险: %.0f%% | ", msg.RiskScore*100)
 	}
+	details := msg.Details
+	if details == "" {
+		details = msg.Body
+	}
 
 	return &domain.DeviceOutput{
 		TTSText:      tts,
 		CardTitle:    "⛔ 审批: " + truncate(msg.Title, 42),
 		CardBody:     riskLine + glassSummary(msg.Body, 140),
+		CardDetails:  details,
 		QuickActions: actions,
 		RenderHint:   "actionable_card",
 	}

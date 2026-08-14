@@ -56,6 +56,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
   private pendingPermission: PendingPermission | null = null;
   private activeQuery: Query | null = null;
   private currentTaskId: string | null = null;
+  private lastAssistantText = '';
 
   constructor(options: ClaudeAdapterOptions) {
     super();
@@ -77,6 +78,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
 
     const taskId = input.taskId || input.sessionId || this.sessionId;
     this.currentTaskId = taskId;
+    this.lastAssistantText = '';
     const queue: AgentEvent[] = [];
     let closed = false;
     let notify: (() => void) | null = null;
@@ -113,6 +115,9 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
           for await (const message of q!) {
             const event = mapClaudeSDKMessage(message, taskId);
             if (event) {
+              if (event.type === 'text') {
+                this.lastAssistantText = event.content;
+              }
               push(event);
             }
           }
@@ -242,6 +247,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
         risk,
         taskId,
         input,
+        ...(this.lastAssistantText ? { reasoning: this.lastAssistantText } : {}),
       } satisfies AgentEvent);
     });
   };

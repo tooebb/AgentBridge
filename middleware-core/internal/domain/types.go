@@ -88,6 +88,7 @@ type UnifiedMessage struct {
 	EventType        EventType         `json:"event_type"`
 	Title            string            `json:"title"`
 	Body             string            `json:"body"`
+	Details          string            `json:"details,omitempty"`
 	Severity         Severity          `json:"severity"`
 	RiskScore        float64           `json:"risk_score"`
 	RiskBlocked      bool              `json:"risk_blocked"`
@@ -116,6 +117,7 @@ type DeviceOutput struct {
 	TTSText      string   `json:"tts_text,omitempty"`
 	CardTitle    string   `json:"card_title,omitempty"`
 	CardBody     string   `json:"card_body,omitempty"`
+	CardDetails  string   `json:"card_details,omitempty"`
 	QuickActions []string `json:"quick_actions,omitempty"`
 	VibePattern  string   `json:"vibe_pattern,omitempty"`
 	RenderHint   string   `json:"render_hint"`

@@ -101,10 +101,10 @@ private fun AgentCard(card: AgentCardState) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = card.body,
+                text = if (card.detailsVisible && card.details.isNotBlank()) card.details else card.body,
                 color = Color(0xFFE8EAED),
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = 4,
+                maxLines = if (card.detailsVisible) 10 else 4,
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -131,13 +131,21 @@ private fun containerColor(card: AgentCardState): Color {
     return when {
         card.renderHint == "alert_card" || card.severity == "critical" -> Color(0xFF6D2932)
         card.renderHint == "actionable_card" -> Color(0xFF224C3A)
+        card.renderHint == "executing_card" -> Color(0xFF1F3A5F)
+        card.renderHint == "rejected_card" -> Color(0xFF5C2A2A)
         card.severity == "warning" -> Color(0xFF5C4A1F)
         else -> Color(0xFF1F2933)
     }
 }
 
 private fun actionHint(card: AgentCardState): String {
-    val click = card.quickActions.getOrNull(0) ?: "continue"
-    val doubleClick = card.quickActions.getOrNull(1) ?: "pause"
-    return "CLICK: $click    DOUBLE: $doubleClick    LONG: view_details"
+    return when (card.renderHint) {
+        "executing_card" -> "处理中…"
+        "rejected_card" -> "已拒绝"
+        else -> {
+            val click = card.quickActions.getOrNull(0) ?: "continue"
+            val doubleClick = card.quickActions.getOrNull(1) ?: "pause"
+            "CLICK: $click    DOUBLE: $doubleClick    SWIPE: view_details"
+        }
+    }
 }

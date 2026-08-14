@@ -65,6 +65,36 @@ test('ClaudeCodeAdapter emits needs_approval and resolves approve to SDK allow',
   assert.equal((await iter.next()).done, true);
 });
 
+test('ClaudeCodeAdapter attaches preceding assistant text as reasoning', async () => {
+  const decisions: PermissionResult[] = [];
+  const adapter = new ClaudeCodeAdapter({
+    sessionId: 'session-1',
+    queryFactory: makeQueryFactory(async function* (options) {
+      yield sdkInit('session-1');
+      yield sdkAssistant('session-1', 'I will write the file now.');
+      decisions.push(await permissionDecision(options, 'Write', { file_path: 'hello.txt' }, 'req-5'));
+      yield sdkResult('session-1', 'wrote file');
+    }),
+  });
+
+  const iter = adapter.send({ type: 'start_task', text: 'write file', sessionId: 'session-1' })[Symbol.asyncIterator]();
+
+  assert.deepEqual(await nextValue(iter), { type: 'task_started', taskId: 'session-1' });
+  assert.deepEqual(await nextValue(iter), { type: 'text', content: 'I will write the file now.' });
+  assert.deepEqual(await nextValue(iter), {
+    type: 'needs_approval',
+    tool: 'Write',
+    risk: 0.4,
+    taskId: 'session-1',
+    input: { file_path: 'hello.txt' },
+    reasoning: 'I will write the file now.',
+  });
+
+  await adapter.handleUserAction({ type: 'approve', taskId: 'session-1', deviceType: 'glasses' });
+  assert.deepEqual(await nextValue(iter), { type: 'task_completed', taskId: 'session-1', summary: 'wrote file' });
+  assert.deepEqual(decisions, [{ behavior: 'allow', updatedInput: { file_path: 'hello.txt' } }]);
+});
+
 test('ClaudeCodeAdapter resolves reject to SDK deny', async () => {
   const decisions: PermissionResult[] = [];
   const adapter = new ClaudeCodeAdapter({
@@ -170,6 +200,14 @@ function sdkResult(sessionId: string, result: string): SDKMessage {
     subtype: 'success',
     is_error: false,
     result,
+    session_id: sessionId,
+  } as SDKMessage;
+}
+
+function sdkAssistant(sessionId: string, text: string): SDKMessage {
+  return {
+    type: 'assistant',
+    message: { content: [{ type: 'text', text }] },
     session_id: sessionId,
   } as SDKMessage;
 }

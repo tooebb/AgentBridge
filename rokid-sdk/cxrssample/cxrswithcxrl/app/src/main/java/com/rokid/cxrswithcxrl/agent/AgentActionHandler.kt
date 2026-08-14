@@ -1,6 +1,8 @@
 package com.rokid.cxrswithcxrl.agent
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.rokid.cxrswithcxrl.receiver.KeyType
@@ -14,6 +16,8 @@ class AgentActionHandler(
     private var textToSpeech: TextToSpeech? = TextToSpeech(appContext, this)
     private var ttsReady = false
     private var currentState = AgentCardState()
+    private val clearHandler = Handler(Looper.getMainLooper())
+    private var clearRunnable: Runnable? = null
 
     override fun onInit(status: Int) {
         ttsReady = status == TextToSpeech.SUCCESS
@@ -23,70 +27,24 @@ class AgentActionHandler(
     }
 
     fun reduce(message: DeviceMessage, duplicate: Boolean): AgentCardState {
-        if (duplicate) {
-            currentState = currentState.copy(
-                duplicateCount = currentState.duplicateCount + 1,
-                statusLine = "duplicate ignored, lastAckedSeq=${currentState.lastAckedSeq}"
-            )
-            return currentState
+        val reduction = CardStateMachine.reduce(currentState, message, duplicate)
+        currentState = reduction.state
+
+        val eventType = message.event?.eventType
+        if (eventType == "task_completed" && !duplicate) {
+            scheduleAutoClear()
+        } else if (eventType == "task_started" || eventType == "needs_approval") {
+            cancelAutoClear()
         }
 
-        val event = message.event
-        val output = message.deviceOverrides?.get(DEVICE_TYPE_AR_GLASSES)
-        val fallbackActions = event?.availableActions?.mapNotNull { it.actionType.takeIf(String::isNotBlank) }.orEmpty()
-        val quickActions = if (event?.riskBlocked == true) {
-            listOf("view_details")
-        } else {
-            output?.quickActions?.takeIf { it.isNotEmpty() } ?: fallbackActions
-        }
-        val title = output?.cardTitle?.takeIf { it.isNotBlank() } ?: event?.title ?: "AgentBridge"
-        val baseBody = output?.cardBody?.takeIf { it.isNotBlank() } ?: event?.body ?: ""
-        val body = if (event?.riskBlocked == true) {
-            "High risk action blocked on glasses. Return to PC to confirm.\n$baseBody"
-        } else {
-            baseBody
-        }
-        val renderHint = output?.renderHint?.takeIf { it.isNotBlank() } ?: renderHintFor(event?.eventType, event?.severity)
-
-        // Don't let status updates overwrite an active actionable card
-        if (currentState.renderHint == "actionable_card" && (renderHint == "status_card" || event?.eventType in CARD_PRESERVED_EVENTS)) {
-            currentState = currentState.copy(
-                lastAckedSeq = message.seq.coerceAtLeast(currentState.lastAckedSeq),
-                statusLine = "seq=${message.seq}, replay=${message.isReplay}, card preserved"
-            )
-            return currentState
-        }
-
-        val severity = event?.severity ?: currentState.severity
-        val statusLine = "seq=${message.seq}, replay=${message.isReplay}, event=${event?.eventType ?: "unknown"}"
-
-        currentState = AgentCardState(
-            connectionLabel = currentState.connectionLabel,
-            title = title,
-            body = body,
-            renderHint = renderHint,
-            severity = severity,
-            taskId = event?.taskId.orEmpty(),
-            quickActions = quickActions,
-            lastAckedSeq = message.seq.coerceAtLeast(currentState.lastAckedSeq),
-            isReplay = message.isReplay,
-            duplicateCount = currentState.duplicateCount,
-            statusLine = statusLine
-        )
-
-        val ttsText = if (event?.riskBlocked == true) {
-            "高风险操作需要回到电脑确认"
-        } else {
-            output?.ttsText?.takeIf { it.isNotBlank() } ?: title
-        }
-        if (!message.isReplay && ttsText.isNotBlank()) {
-            speak(ttsText)
+        if (!message.isReplay && reduction.ttsText.isNotBlank()) {
+            speak(reduction.ttsText)
         }
         return currentState
     }
 
     fun onConnectionChanged(label: String): AgentCardState {
-        currentState = currentState.copy(connectionLabel = label)
+        currentState = CardStateMachine.resetToIdle(currentState).copy(connectionLabel = label)
         return currentState
     }
 
@@ -94,7 +52,6 @@ class AgentActionHandler(
         val action = when (keyType) {
             KeyType.CLICK -> pickAction(0) ?: "continue"
             KeyType.DOUBLE_CLICK -> pickAction(1) ?: "pause"
-            KeyType.LONG_PRESS -> "view_details"
             KeyType.ACTION_TWO_FINGER_SINGLE_TAP -> pickAction(0) ?: "continue"
             KeyType.ACTION_TWO_FINGER_DOUBLE_TAP -> pickAction(1) ?: "pause"
             KeyType.ACTION_TWO_FINGER_SWIPE_FORWARD -> "continue"
@@ -106,6 +63,9 @@ class AgentActionHandler(
         }
 
         val sent = actionSender(currentState.taskId, action)
+        if (sent) {
+            currentState = CardStateMachine.onDecision(currentState, action)
+        }
         currentState = currentState.copy(
             statusLine = if (sent) {
                 "sent action=$action, lastAckedSeq=${currentState.lastAckedSeq}"
@@ -117,6 +77,12 @@ class AgentActionHandler(
     }
 
     fun onGestureResult(actionType: String, sent: Boolean): AgentCardState {
+        if (sent) {
+            currentState = when (actionType) {
+                "view_details" -> CardStateMachine.onViewDetails(currentState)
+                else -> CardStateMachine.onDecision(currentState, actionType)
+            }
+        }
         currentState = currentState.copy(
             statusLine = if (sent) {
                 "sent action=$actionType, lastAckedSeq=${currentState.lastAckedSeq}"
@@ -128,12 +94,27 @@ class AgentActionHandler(
     }
 
     fun close() {
+        cancelAutoClear()
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
     }
 
     private fun pickAction(index: Int): String? = currentState.quickActions.getOrNull(index)
+
+    private fun scheduleAutoClear() {
+        cancelAutoClear()
+        val runnable = Runnable {
+            currentState = CardStateMachine.resetToIdle(currentState)
+        }
+        clearRunnable = runnable
+        clearHandler.postDelayed(runnable, AUTO_CLEAR_DELAY_MS)
+    }
+
+    private fun cancelAutoClear() {
+        clearRunnable?.let { clearHandler.removeCallbacks(it) }
+        clearRunnable = null
+    }
 
     private fun speak(text: String) {
         if (!ttsReady) {
@@ -143,16 +124,8 @@ class AgentActionHandler(
         textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "agentbridge-${System.currentTimeMillis()}")
     }
 
-    private fun renderHintFor(eventType: String?, severity: String?): String {
-        return when {
-            eventType == "needs_approval" -> "actionable_card"
-            severity == "critical" -> "alert_card"
-            else -> "status_card"
-        }
-    }
-
     companion object {
         private const val TAG = "AgentActionHandler"
-        private val CARD_PRESERVED_EVENTS = setOf("task_started", "task_running", "heartbeat")
+        private const val AUTO_CLEAR_DELAY_MS = 3000L
     }
 }
