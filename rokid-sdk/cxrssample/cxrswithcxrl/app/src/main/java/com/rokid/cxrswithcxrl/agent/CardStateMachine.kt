@@ -76,22 +76,27 @@ object CardStateMachine {
         return Reduction(newState, ttsText)
     }
 
-    fun onDecision(current: AgentCardState, action: String): AgentCardState = when (action) {
-        "approve" -> current.copy(
-            renderHint = "executing_card",
-            title = "⏳ 执行中",
-            body = "已批准，等待 agent 输出…",
-            quickActions = emptyList(),
-            decision = "approve"
-        )
-        "reject" -> current.copy(
-            renderHint = "rejected_card",
-            title = "⛔ 已拒绝",
-            body = "已拒绝该操作，等待 agent 回复…",
-            quickActions = emptyList(),
-            decision = "reject"
-        )
-        else -> current
+    fun onDecision(current: AgentCardState, action: String): AgentCardState {
+        if (current.renderHint != "actionable_card" || current.decision.isNotEmpty()) {
+            return current
+        }
+        return when (action) {
+            "approve" -> current.copy(
+                renderHint = "executing_card",
+                title = "⏳ 执行中",
+                body = "已批准，等待 agent 输出…",
+                quickActions = emptyList(),
+                decision = "approve"
+            )
+            "reject" -> current.copy(
+                renderHint = "rejected_card",
+                title = "⛔ 已拒绝",
+                body = "已拒绝该操作，等待 agent 回复…",
+                quickActions = emptyList(),
+                decision = "reject"
+            )
+            else -> current
+        }
     }
 
     fun onViewDetails(current: AgentCardState): AgentCardState =

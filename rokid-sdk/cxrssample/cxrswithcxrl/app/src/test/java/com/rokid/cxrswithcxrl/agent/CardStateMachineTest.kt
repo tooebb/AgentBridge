@@ -81,6 +81,24 @@ class CardStateMachineTest {
     }
 
     @Test
+    fun onDecision_noopWhenNotActionableCard() {
+        val idle = AgentCardState() // renderHint = "status_card"
+        assertEquals("status_card", idle.renderHint)
+        assertEquals(idle, CardStateMachine.onDecision(idle, "approve"))
+        assertEquals(idle, CardStateMachine.onDecision(idle, "reject"))
+    }
+
+    @Test
+    fun onDecision_noopWhenAlreadyDecided() {
+        val approval = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
+        val decided = CardStateMachine.onDecision(approval, "approve")
+        assertEquals("approve", decided.decision)
+        val again = CardStateMachine.onDecision(decided, "reject")
+        assertEquals("approve", again.decision)
+        assertEquals("executing_card", again.renderHint)
+    }
+
+    @Test
     fun onViewDetails_togglesDetailsVisible() {
         val approval = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
         assertFalse(approval.detailsVisible)
