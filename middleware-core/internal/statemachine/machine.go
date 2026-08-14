@@ -44,6 +44,12 @@ var validTransitions = map[domain.TaskState]map[domain.EventType]domain.TaskStat
 		domain.EventTaskRunning: domain.TaskStateRunning,
 		domain.EventTaskFailed:  domain.TaskStateFailed,
 	},
+	domain.TaskStateFailed: {
+		domain.EventTaskStarted: domain.TaskStateStarting,
+	},
+	domain.TaskStateCompleted: {
+		domain.EventTaskStarted: domain.TaskStateStarting,
+	},
 }
 
 // New creates a new state machine.

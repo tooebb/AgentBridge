@@ -2,7 +2,7 @@
 
 真机链路 `claude 工具调用 → canUseTool 风控 → needs_approval 卡片 → Core → 眼镜(WiFi LAN) → 手势 → Core → adapter → allow/deny → 工具执行/拒绝` 已跑通，spec §9.3 四场景全部通过。
 
-**状态 (2026-08-14 回归后)**：Bug 1–4 已由 Codex 修复（commit `db30e04`）并通过真机回归验证（四场景重跑全部 ✅）。Bug 5 为回归中新发现，待修。
+**状态 (2026-08-14 回归后)**：Bug 1–4 已由 Codex 修复（commit `db30e04`）并通过真机回归验证（四场景重跑全部 ✅）。Bug 5 已完成 Core 侧状态机修复，待真机/Mock Device 复跑验证。
 
 ---
 
@@ -62,6 +62,8 @@
 ## Bug 5: 状态机 terminal 态不复位（复用 taskID 后卡在 completed）
 
 **文件**: `middleware-core/internal/statemachine/machine.go`
+
+**状态**: 已按 Core 侧最小修复落地：`TaskStateCompleted` / `TaskStateFailed` 收到新的 `task_started` 时重新进入 `starting`。已补单测覆盖同一 taskID 的第二个 turn 从 `completed` 回到 `starting` 并继续进入 `awaiting_approval`；仍需 E2E 复跑确认。
 
 **现象**: task_id 统一为 session 级（`default`）后，同一会话的第二个 turn（新 prompt）复用相同 taskID，但 Core 状态机已停在 `completed`，导致后续所有事件都打 `invalid transition: no transitions defined from state "completed"`。
 
