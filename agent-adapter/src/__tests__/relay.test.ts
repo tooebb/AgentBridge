@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ApprovalRelay } from '../relay.js';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { ApprovalRelay, handleApprove } from '../relay.js';
 import type { UnifiedMessage } from '../types.js';
 
 function makeRelay(timeoutMs: number, sent: UnifiedMessage[] = []) {
@@ -61,4 +63,36 @@ test('concurrent requests resolve independently', async () => {
   relay.handleUserAction({ type: 'approve', taskId: 'tu_b' });
   assert.equal(await p1, 'deny');
   assert.equal(await p2, 'allow');
+});
+
+test('POST /approve returns allow after user action', async () => {
+  let eventSent!: () => void;
+  const eventSentPromise = new Promise<void>((r) => { eventSent = r; });
+
+  const relay = new ApprovalRelay({
+    sendEvent: async () => { eventSent(); },
+    sessionId: 'default',
+    timeoutMs: 0,
+  });
+
+  const server = createServer((req, res) => { void handleApprove(req, res, relay); });
+  await new Promise<void>((r) => server.listen(0, r));
+  const port = (server.address() as AddressInfo).port;
+
+  const respPromise = fetch(`http://127.0.0.1:${port}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool_use_id: 'tu_1', tool_name: 'Write', tool_input: { file_path: 'x' }, risk: 0.4, cwd: '/tmp' }),
+  });
+
+  await eventSentPromise;
+  relay.handleUserAction({ type: 'approve', taskId: 'tu_1' });
+
+  const resp = await respPromise;
+  const body = await resp.json() as { decision: string };
+  assert.equal(resp.status, 200);
+  assert.equal(body.decision, 'allow');
+
+  server.closeAllConnections();
+  await new Promise<void>((r) => server.close(() => r()));
 });
