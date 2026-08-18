@@ -114,6 +114,12 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - E2E 四场景通过：①只读工具自动放行 ②写文件 approve 执行 ③rm reject 拒绝 ④超时 auto-allow
 - 待修 bug：`docs/2026-08-14-phase3a-e2e-bugfix.md`（task_id 不一致 / Core 风险分缺口 / 30s 超时太短）
 
+#### 自动镜像（交互模式）
+
+用法：先起 Core，再在 `agent-adapter/` 运行 `npm run start:relay`，然后用户终端正常运行 `claude`；高风险工具调用会通过 PreToolUse hook 自动镜像到眼镜审批。
+
+自动镜像依赖 Claude Code hook。若以 `--bare` 或 `--settings '{"disableAllHooks":true}'` 启动 claude，hook 不加载，眼镜将不会收到审批卡片。这是 Claude Code 的 CLI 设计，非 AgentBridge 可封堵；请勿在需要眼镜监督的场景下使用这些参数。
+
 **Phase 2 刻意推迟到 Phase 3 的项目**：
 - TTS 真机验证（代码已写，音频引擎初始化失败，需排查 Rokid 音频路由）
 - 语音审批（依赖 TTS 可用）
