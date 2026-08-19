@@ -4,7 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Base64
 import android.util.Log
@@ -14,7 +18,11 @@ import com.rokid.cxr.Caps
 import com.rokid.cxrswithcxrl.agent.AgentActionHandler
 import com.rokid.cxrswithcxrl.agent.AgentBridgeClient
 import com.rokid.cxrswithcxrl.agent.AgentCardState
+import com.rokid.cxrswithcxrl.agent.ConnectionConfig
+import com.rokid.cxrswithcxrl.agent.ConnectionResolver
+import com.rokid.cxrswithcxrl.agent.ConnectionTarget
 import com.rokid.cxrswithcxrl.agent.DeviceMessage
+import com.rokid.cxrswithcxrl.agent.DiscoveredService
 import com.rokid.cxrswithcxrl.receiver.KeyEventListener
 import com.rokid.cxrswithcxrl.receiver.KeyReceiver
 import com.rokid.cxrswithcxrl.receiver.KeyType
@@ -41,10 +49,12 @@ class MainViewModel: ViewModel() {
     private var agentClient: AgentBridgeClient? = null
     private var actionHandler: AgentActionHandler? = null
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+    private var connectionStarted = false
 
     private val cmdKey = "rk_custom_key"
     private val clientKey = "rk_custom_client"
     private var netInfo = "net:?"
+    private val discoveryTimeoutMs = 5_000L
     private fun debugText(msg: String) = "$msg | $netInfo"
 
     private val keyEventListener = object : KeyEventListener {
@@ -217,26 +227,83 @@ class MainViewModel: ViewModel() {
             netInfo = "$netInfo | wifiLock:${e.javaClass.simpleName}"
         }
 
-        // LAN direct: glasses WiFi connects to PC on same LAN
-        val pcIp = "192.168.31.209"
-        val pcPort = 8088
-        val serverUrl = "ws://$pcIp:$pcPort"
-        netInfo = "$netInfo | LAN direct mode"
-        _debugStatus.value = debugText("lan direct")
-        // Quick TCP probe then connect
+        // Resolve target: mDNS discovery -> manual IP -> ADB tunnel.
+        val config = readConfig(appContext)
+        startDiscovery(appContext, handler, config)
+    }
+
+    private fun readConfig(context: Context): ConnectionConfig {
+        val prefs = context.getSharedPreferences("agent_bridge", Context.MODE_PRIVATE)
+        return ConnectionConfig(
+            manualIp = prefs.getString("manual_pc_ip", "") ?: "",
+            manualPort = prefs.getInt("manual_pc_port", 8088),
+            preferredId = prefs.getString("preferred_pc_id", "") ?: "",
+        )
+    }
+
+    private fun startDiscovery(context: Context, handler: AgentActionHandler, config: ConnectionConfig) {
+        val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager
+        if (nsdManager == null) {
+            connectResolved(context, handler, ConnectionResolver.resolve(emptyList(), config))
+            return
+        }
+
+        val services = mutableListOf<DiscoveredService>()
+        val discoveryListener = object : NsdManager.DiscoveryListener {
+            override fun onDiscoveryStarted(serviceType: String) {}
+            override fun onDiscoveryStopped(serviceType: String) {}
+            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                connectResolved(context, handler, ConnectionResolver.resolve(emptyList(), config))
+            }
+            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
+            override fun onServiceFound(serviceInfo: NsdServiceInfo) {
+                nsdManager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
+                    override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {}
+                    override fun onServiceResolved(resolved: NsdServiceInfo) {
+                        val host = resolved.host?.hostAddress ?: return
+                        val id = resolved.attributes?.get("id")?.let { String(it, Charsets.UTF_8) } ?: ""
+                        services += DiscoveredService(host, resolved.port, id)
+                        if (config.preferredId.isBlank()) {
+                            connectResolved(context, handler, ConnectionResolver.resolve(services.toList(), config))
+                        }
+                    }
+                })
+            }
+            override fun onServiceLost(serviceInfo: NsdServiceInfo) {}
+        }
+
+        nsdManager.discoverServices("_agentbridge._tcp", NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+        netInfo = "$netInfo | mDNS discovering"
+        _debugStatus.value = debugText("mdns discovering")
+
+        Handler(Looper.getMainLooper()).postDelayed({
+            try {
+                nsdManager.stopServiceDiscovery(discoveryListener)
+            } catch (_: Exception) {
+            }
+            connectResolved(context, handler, ConnectionResolver.resolve(services.toList(), config))
+        }, discoveryTimeoutMs)
+    }
+
+    private fun connectResolved(context: Context, handler: AgentActionHandler, target: ConnectionTarget) {
+        if (connectionStarted || agentClient != null) return
+        connectionStarted = true
+        val url = target.wsUrl
+        netInfo = "$netInfo | serverUrl=$url"
+        _debugStatus.value = debugText("resolved")
         Thread {
             val tcpResult = try {
                 val sock = java.net.Socket()
-                sock.connect(java.net.InetSocketAddress(pcIp, pcPort), 5000)
+                sock.connect(java.net.InetSocketAddress(target.host, target.port), 5000)
                 val ok = sock.isConnected
                 sock.close()
                 if (ok) "TCP:OK" else "TCP:clsd"
             } catch (e: Exception) {
                 "TCP:${e.javaClass.simpleName}"
             }
-            netInfo = "$netInfo | serverUrl=$serverUrl $tcpResult"
+            netInfo = "$netInfo | $tcpResult"
             _debugStatus.value = debugText("tcp done")
-            createClient(appContext, handler, serverUrl, null)
+            createClient(context, handler, url, null)
         }.start()
     }
 
