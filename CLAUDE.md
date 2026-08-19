@@ -84,26 +84,24 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 
 **手机端（CXRLSample）**：仅做 CXR 生命周期（install + start），不参与数据面。
 
-### 眼镜 WiFi 发现与 LAN 直连 (2026-08-11)
+### 眼镜连接模式（有线 ADB / 无线 LAN / mDNS）
 
-**重大发现**：眼镜有完整 WiFi 6 硬件（wlan0, 芯片 kiwi_v2），支持 5GHz 频段。之前"眼镜没有 WiFi"的判断是错的——系统默认禁用 station 模式以省电。
+眼镜 App 连 Core 有三种模式，历史演变如下。**核心教训：LAN 直连不能硬编码 PC IP**（DHCP 会漂移）。
 
-| 项 | 值 |
-|----|-----|
-| WiFi 芯片 | Qualcomm kiwi_v2, WiFi 6 |
-| 连接网络 | GAEA, 5GHz (5200MHz) |
-| 眼镜 IP | 192.168.31.50 |
-| PC IP | 192.168.31.209 |
-| 信号 | RSSI -21 ~ -19, 极好 |
-| 延时 | ping < 10ms |
+| 模式 | 眼镜连的地址 | 依赖 | 状态 |
+|------|-------------|------|------|
+| ADB 反向隧道 | `ws://127.0.0.1:19090` | USB 连 PC + `adb reverse tcp:19090 tcp:8088` | ✅ Phase 2 验证过，最可靠 |
+| LAN 直连 | `ws://<PC_IP>:8088` | 眼镜 WiFi + PC 同一网段 | ⚠️ 当前代码硬编码 209，已因 IP 漂移失效 |
+| mDNS 服务发现 | 自动发现 PC IP | 同一 WiFi | 🔜 待开发（无线正解） |
 
-**连接模式**：从 ADB 反向隧道 (`ws://127.0.0.1:19090`) 改为 LAN 直连 (`ws://192.168.31.209:8088`)。
+当前代码状态：`MainViewModel.kt` 硬编码 `192.168.31.209`（commit `33a291e` 引入，为摆脱 USB 线缆）。`AgentBridgeClient.kt` 的默认值 `ws://127.0.0.1:19090` 仍保留。
 
-**WiFi 稳定性**：
-- Android 10+ 禁止非系统 App 调用 `setWifiEnabled()`，App 无法自行开 WiFi
-- App 启动时申请 `WIFI_MODE_FULL_HIGH_PERF` WiFiLock，**锁住后熄屏不掉**
-- 眼镜重启后需用 ADB 开一次 WiFi（已加入 watchdog 自动执行）
-- 日常使用全程无线，只有眼镜完全断电才需重新插 USB 开 WiFi
+**踩坑（2026-08-19）**：
+- PC 无线网卡 DHCP 动态，IP 会漂移（209→185），硬编码 IP 必失效。
+- **不要**给 PC 网卡加静态 IP/alias 固定地址：`netsh add address` 会把 DHCP 网卡切静态并丢 DNS，导致无法联网；FlClash（TUN 模式）也会因网卡 IP 变化重连断网。
+- 眼镜熄屏/重启后 WiFi 被系统关闭，需 `svc wifi enable` 开一次 + App WiFiLock 锁住。
+
+**WiFi 硬件**：Qualcomm kiwi_v2 (WiFi 6)，网络 GAEA 5GHz。眼镜重启后需 ADB 开一次 WiFi（watchdog 自动执行）。
 
 ### Phase 3（多 Agent 集成 / 生产加固）— 🔜 进行中
 
@@ -127,12 +125,13 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - middleware-core 测试（Go 表驱动测试 for dispatcher + approval manager）
 - 主动 ack 补全（当前 seq 去重已覆盖核心场景）
 - 认证/安全层
+- mDNS 服务发现（LAN 直连的正解：PC 端 Core 广播 `_agentbridge._tcp`，眼镜端 NsdManager 自动发现，解决 IP 漂移）
 
 **环境启动必查**：
 - Core 端口 → `AGENTBRIDGE_ADDR=":8088"`（避免 NI Application Web Server 抢占 8080）
 - Agent Adapter → `AGENTBRIDGE_SESSION=default`（与眼镜同 session）
-- ADB 隧道 → 双设备（手机 `4EU0221B11003871` + 眼镜 `1901092534002787`）
-- 连通验证 → `curl http://127.0.0.1:19090/health` 应返回 200
+- 眼镜连接 → 见「眼镜连接模式」：有线用 ADB 隧道，无线待 mDNS
+- 双设备 → 手机 `4EU0221B11003871` + 眼镜 `1901092534002787`
 - 守护进程 → `scripts/tunnel-watchdog.ps1` 保持运行
 
 ### CXR-L SDK 联调
