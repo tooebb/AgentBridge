@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"/home/node3/multica_workspaces/84fd9023-4ff1-41c2-beec-80a6dad991e7/474cfcb7/workdir/AgentBridge/agent-adapter/dist/hooks/approval-relay.js\"",
+            "command": "node \"D:/project/5project/AgentBridge-master/agent-adapter/dist/hooks/approval-relay.js\"",
             "timeout": 180
           }
         ]
