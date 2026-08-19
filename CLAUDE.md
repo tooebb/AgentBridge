@@ -91,10 +91,10 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 | 模式 | 眼镜连的地址 | 依赖 | 状态 |
 |------|-------------|------|------|
 | ADB 反向隧道 | `ws://127.0.0.1:19090` | USB 连 PC + `adb reverse tcp:19090 tcp:8088` | ✅ Phase 2 验证过，最可靠 |
-| LAN 直连 | `ws://<PC_IP>:8088` | 眼镜 WiFi + PC 同一网段 | ⚠️ 当前代码硬编码 209，已因 IP 漂移失效 |
-| mDNS 服务发现 | 自动发现 PC IP | 同一 WiFi | 🔜 待开发（无线正解） |
+| LAN 直连 | `ws://<PC_IP>:8088` | 眼镜 WiFi + PC 同一网段 | ⚠️ 已被 mDNS 替代，保留手动 IP 兜底 |
+| mDNS 服务发现 | 自动发现 PC IP | 同一 WiFi | ✅ 已实现（Core 广播 + NsdManager 发现） |
 
-当前代码状态：`MainViewModel.kt` 硬编码 `192.168.31.209`（commit `33a291e` 引入，为摆脱 USB 线缆）。`AgentBridgeClient.kt` 的默认值 `ws://127.0.0.1:19090` 仍保留。
+当前代码状态：Core 启动时广播 `_agentbridge._tcp`；眼镜 App 通过 NsdManager 自动发现 Core，并按 mDNS → 手动 IP → ADB 隧道降级链选择连接地址。`AgentBridgeClient.kt` 的默认值 `ws://127.0.0.1:19090` 仍保留。
 
 **踩坑（2026-08-19）**：
 - PC 无线网卡 DHCP 动态，IP 会漂移（209→185），硬编码 IP 必失效。
@@ -125,12 +125,11 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - middleware-core 测试（Go 表驱动测试 for dispatcher + approval manager）
 - 主动 ack 补全（当前 seq 去重已覆盖核心场景）
 - 认证/安全层
-- mDNS 服务发现（LAN 直连的正解：PC 端 Core 广播 `_agentbridge._tcp`，眼镜端 NsdManager 自动发现，解决 IP 漂移）
 
 **环境启动必查**：
 - Core 端口 → `AGENTBRIDGE_ADDR=":8088"`（避免 NI Application Web Server 抢占 8080）
 - Agent Adapter → `AGENTBRIDGE_SESSION=default`（与眼镜同 session）
-- 眼镜连接 → 见「眼镜连接模式」：有线用 ADB 隧道，无线待 mDNS
+- 眼镜连接 → 见「眼镜连接模式」：无线优先 mDNS，失败后手动 IP，再 fallback 到 ADB 隧道
 - 双设备 → 手机 `4EU0221B11003871` + 眼镜 `1901092534002787`
 - 守护进程 → `scripts/tunnel-watchdog.ps1` 保持运行
 
