@@ -37,8 +37,8 @@
 - 阈值判断抽成纯函数（便于单测）：`fun shouldRediscover(firstFailureAt: Long, now: Long): Boolean`。
 
 **`MainViewModel.kt`**
-- `Listener` 实现新增 `onStale()` 处理：拆旧 client（`disconnect()` + 置空）→ 重置 `connectionStarted = false` → 重跑 `startDiscovery`。
-- 移除 `connectResolved` 的 `connectionStarted` guard 与 `createClient` 的 `if (agentClient != null) return`，改为「先拆旧、再建新」。
+- `Listener` 实现新增 `onStale()` 处理：先拆旧 client（`old?.disconnect()`）→ 置空 `agentClient = null` → 重置 `connectionStarted = false` → 重跑 `startDiscovery`。
+- **保留** `connectResolved` 的 `connectionStarted` guard 与 `createClient` 的 `if (agentClient != null) return`（它们防止启动时多个 mDNS 服务重复建连）；`onStale` 里先重置这两个状态再重发现，使重发现能通过 guard 建新 client。
 
 ## 边界情况
 
