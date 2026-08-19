@@ -74,7 +74,9 @@ func main() {
 		}
 	}
 	port := mdns.ParsePort(addr)
-	if shutdown, err := mdns.Start(port, id, "default"); err != nil {
+	if os.Getenv("AGENTBRIDGE_DISABLE_MDNS") != "" {
+		log.Printf("server: mDNS broadcast disabled (AGENTBRIDGE_DISABLE_MDNS set)")
+	} else if shutdown, err := mdns.Start(port, id, "default"); err != nil {
 		log.Printf("server: mdns broadcast failed: %v", err)
 	} else {
 		defer shutdown()
