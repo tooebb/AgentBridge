@@ -91,10 +91,12 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 | 模式 | 眼镜连的地址 | 依赖 | 状态 |
 |------|-------------|------|------|
 | ADB 反向隧道 | `ws://127.0.0.1:19090` | USB 连 PC + `adb reverse tcp:19090 tcp:8088` | ✅ Phase 2 验证过，最可靠 |
-| LAN 直连 | `ws://<PC_IP>:8088` | 眼镜 WiFi + PC 同一网段 | ⚠️ 已被 mDNS 替代，保留手动 IP 兜底 |
+| LAN 直连（手动 IP） | `ws://<PC_IP>:8088` | 眼镜 WiFi + PC 同一网段 | ⚠️ 已被 mDNS 替代；代码保留兜底，但此 ROM `run-as` 被封，手动 IP 暂不可配置 |
 | mDNS 服务发现 | 自动发现 PC IP | 同一 WiFi | ✅ 已实现（Core 广播 + NsdManager 发现） |
 
 当前代码状态：Core 启动时广播 `_agentbridge._tcp`；眼镜 App 通过 NsdManager 自动发现 Core，并按 mDNS → 手动 IP → ADB 隧道降级链选择连接地址。`AgentBridgeClient.kt` 的默认值 `ws://127.0.0.1:19090` 仍保留。
+
+> 手动 IP 兜底（`scripts/set-glasses-config.ps1`）依赖 `adb run-as` 写 `shared_prefs/agent_bridge.xml`，但眼镜 ROM 把 `run-as` 一并封禁（返回 `error: closed`，同 `pm`/`dumpsys`），故该脚本在真机上不可用。降级链纯逻辑正确、单测覆盖，但实践中手动 IP 无法配置。
 
 **踩坑（2026-08-19）**：
 - PC 无线网卡 DHCP 动态，IP 会漂移（209→185），硬编码 IP 必失效。

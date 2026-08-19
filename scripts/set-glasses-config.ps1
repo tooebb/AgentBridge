@@ -1,3 +1,8 @@
+# Writes manual PC IP / preferred id into the glasses app's SharedPreferences.
+# NOTE: This script relies on `adb run-as`, which the Rokid glasses ROM blocks
+# (returns "error: closed", same as `pm`/`dumpsys`). It works on stock Android
+# debug builds but is NOT usable on the current glasses device. Kept for
+# reference and future ROMs that re-enable run-as.
 param(
     [string]$Ip = "",
     [string]$Port = "8088",
