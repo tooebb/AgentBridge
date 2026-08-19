@@ -11,6 +11,7 @@ import (
 	"agentbridge/internal/approval"
 	"agentbridge/internal/device"
 	"agentbridge/internal/domain"
+	"agentbridge/internal/mdns"
 	"agentbridge/internal/notify"
 	"agentbridge/internal/risk"
 	"agentbridge/internal/statemachine"
@@ -63,6 +64,23 @@ func main() {
 	if addr == "" {
 		addr = ":8080"
 	}
+
+	id := os.Getenv("AGENTBRIDGE_INSTANCE_ID")
+	if id == "" {
+		if h, err := os.Hostname(); err == nil {
+			id = h
+		} else {
+			id = "agentbridge"
+		}
+	}
+	port := mdns.ParsePort(addr)
+	if shutdown, err := mdns.Start(port, id, "default"); err != nil {
+		log.Printf("server: mdns broadcast failed: %v", err)
+	} else {
+		defer shutdown()
+		log.Printf("server: mDNS broadcast _agentbridge._tcp (id=%s port=%d)", id, port)
+	}
+
 	log.Printf("AgentBridge Middleware Core starting on %s", addr)
 	if err := http.ListenAndServe(addr, srv.router); err != nil {
 		log.Fatalf("server: %v", err)
