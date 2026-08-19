@@ -27,6 +27,7 @@ class AgentBridgeClient(
         fun onConnectionChanged(label: String)
         fun onMessage(message: DeviceMessage, duplicate: Boolean)
         fun onError(label: String, throwable: Throwable?)
+        fun onStale() {}
     }
 
     private val gson = Gson()
@@ -47,6 +48,7 @@ class AgentBridgeClient(
     private var webSocket: WebSocket? = null
     private var closedByUser = false
     private var reconnectDelayMs = 2_000L
+    private val reconnectTracker = ReconnectTracker()
     private val seenSeqs = linkedSetOf<Long>()
     private val seenMessageIds = linkedSetOf<String>()
 
@@ -106,6 +108,7 @@ class AgentBridgeClient(
     private val socketListener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             reconnectDelayMs = 2_000L
+            reconnectTracker.markConnected()
             listener.onConnectionChanged("WS: connected")
             Log.d(TAG, "connected ${wsUrl()}")
         }
@@ -162,6 +165,12 @@ class AgentBridgeClient(
 
     private fun scheduleReconnect() {
         if (closedByUser) {
+            return
+        }
+        val now = System.currentTimeMillis()
+        reconnectTracker.recordFailure(now)
+        if (reconnectTracker.isStale(now)) {
+            mainHandler.post { listener.onStale() }
             return
         }
         val delay = reconnectDelayMs

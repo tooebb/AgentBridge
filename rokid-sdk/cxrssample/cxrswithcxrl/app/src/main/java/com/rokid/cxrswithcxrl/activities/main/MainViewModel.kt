@@ -342,6 +342,16 @@ class MainViewModel: ViewModel() {
                     _debugStatus.value = debugText("ERR: $label${if (exMsg.isNotBlank()) " | $exMsg" else ""}")
                     _agentCard.value = handler.onConnectionChanged("ERR: $label")
                 }
+
+                override fun onStale() {
+                    Log.d("WIFI", "onStale: re-discovering")
+                    _debugStatus.value = debugText("stale, re-discovering")
+                    val old = agentClient
+                    agentClient = null
+                    connectionStarted = false
+                    old?.disconnect()
+                    startDiscovery(context, handler, readConfig(context))
+                }
             }
         ).also { client ->
             _debugStatus.value = debugText("connecting now...")
