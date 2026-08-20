@@ -11,6 +11,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"D:/project/5project/AgentBridge-master/agent-adapter/dist/hooks/summary-relay.js\"",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   },
   "permissions": {
