@@ -59,6 +59,7 @@ func main() {
 	}
 
 	srv.setupRoutes()
+	go srv.approvalTimeoutLoop()
 
 	addr := os.Getenv("AGENTBRIDGE_ADDR")
 	if addr == "" {
@@ -268,7 +269,9 @@ func (s *Server) onDeviceMessage(sessionID string, msg *domain.ClientMessage) {
 
 		// Transition state back to running.
 		s.stateMgr.Transition(msg.TaskID, sessionID, domain.EventTaskRunning)
+		s.broadcastApprovalTerminal(sessionID, msg.TaskID, approved)
 		s.relayUserAction(sessionID, msg)
+		s.approvalMgr.Delete(resolved.ID)
 
 	case domain.ActionContinue:
 		s.stateMgr.Transition(msg.TaskID, sessionID, domain.EventTaskRunning)
@@ -322,6 +325,75 @@ func (s *Server) relayUserAction(sessionID string, msg *domain.ClientMessage) {
 		log.Printf("server: user action relay to agent_adapter failed: %v", err)
 	}
 	s.hub.BroadcastToDashboard(deviceMsg)
+}
+
+func buildApprovalTerminal(approved bool) *domain.UnifiedMessage {
+	if approved {
+		return &domain.UnifiedMessage{
+			EventType: domain.EventTaskCompleted,
+			Title:     "已批准",
+			Body:      "审批通过，已放行工具执行",
+			Severity:  domain.SeverityInfo,
+		}
+	}
+	return &domain.UnifiedMessage{
+		EventType: domain.EventTaskCompleted,
+		Title:     "已拒绝",
+		Body:      "已拒绝该操作",
+		Severity:  domain.SeverityWarning,
+	}
+}
+
+func buildApprovalTimeoutTerminal() *domain.UnifiedMessage {
+	return &domain.UnifiedMessage{
+		EventType: domain.EventTaskCompleted,
+		Title:     "已超时自动放行",
+		Body:      "审批超时，已自动放行工具执行",
+		Severity:  domain.SeverityWarning,
+	}
+}
+
+func (s *Server) broadcastApprovalTerminal(sessionID, taskID string, approved bool) {
+	s.broadcastApprovalMessage(sessionID, taskID, buildApprovalTerminal(approved))
+}
+
+func (s *Server) broadcastApprovalMessage(sessionID, taskID string, msg *domain.UnifiedMessage) {
+	msg.ID = uuid.New().String()
+	msg.TaskID = taskID
+	msg.SessionID = sessionID
+	msg.Timestamp = time.Now()
+	msg.AgentID = "middleware-core"
+
+	overrides := s.dispatcher.Transform(msg)
+	deviceMsg := &domain.DeviceMessage{
+		Direction: "server_to_client",
+		MessageID: uuid.New().String(),
+		SessionID: sessionID,
+		Timestamp: time.Now().UnixMilli(),
+		Event:     msg,
+		Overrides: overrides,
+	}
+
+	if _, err := s.eventStore.Append(sessionID, deviceMsg); err != nil {
+		log.Printf("server: approval terminal append failed: %v", err)
+	}
+	if err := s.hub.SendToDevice(sessionID, domain.DeviceGlass, deviceMsg); err != nil {
+		log.Printf("server: approval terminal send to glass failed: %v", err)
+	}
+	s.hub.BroadcastToDashboard(deviceMsg)
+}
+
+func (s *Server) approvalTimeoutLoop() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		for _, expired := range s.approvalMgr.Expire() {
+			log.Printf("server: approval %s expired; broadcasting auto-allow terminal", expired.ID)
+			s.broadcastApprovalMessage(expired.SessionID, expired.TaskID, buildApprovalTimeoutTerminal())
+			s.approvalMgr.Delete(expired.ID)
+		}
+	}
 }
 
 // ---------- Dashboard handlers ----------

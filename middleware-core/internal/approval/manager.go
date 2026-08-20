@@ -1,6 +1,8 @@
 package approval
 
 import (
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -57,7 +59,9 @@ func NewManager() *Manager {
 	}
 }
 
-// Create registers a new pending approval with a 5-minute timeout.
+const defaultCoreTimeout = 120 * time.Second
+
+// Create registers a new pending approval with the configured Core timeout.
 func (m *Manager) Create(taskID, sessionID, eventID string, riskScore float64) *Approval {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -77,7 +81,7 @@ func (m *Manager) Create(taskID, sessionID, eventID string, riskScore float64) *
 		RiskScore:   riskScore,
 		Status:      StatusPending,
 		CreatedAt:   time.Now(),
-		TimeoutAt:   time.Now().Add(5 * time.Minute),
+		TimeoutAt:   time.Now().Add(coreTimeout()),
 		MaxRetries:  3,
 		RetryDelays: []time.Duration{1 * time.Minute, 3 * time.Minute, 5 * time.Minute},
 	}
@@ -140,20 +144,35 @@ func (m *Manager) NeedsRetry(approvalID string) (bool, time.Duration) {
 	return true, delay
 }
 
-// Expire marks expired approvals and returns their IDs.
-func (m *Manager) Expire() []string {
+// Expire marks expired approvals and returns them.
+func (m *Manager) Expire() []*Approval {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := time.Now()
-	var expired []string
-	for id, a := range m.active {
+	var expired []*Approval
+	for _, a := range m.active {
 		if a.Status == StatusPending && now.After(a.TimeoutAt) {
 			a.Status = StatusExpired
-			expired = append(expired, id)
+			expired = append(expired, a)
 		}
 	}
 	return expired
+}
+
+// Delete removes an approval from active tracking.
+func (m *Manager) Delete(approvalID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	a, ok := m.active[approvalID]
+	if !ok {
+		return
+	}
+	delete(m.active, approvalID)
+	if mappedID, ok := m.byTask[a.TaskID]; ok && mappedID == approvalID {
+		delete(m.byTask, a.TaskID)
+	}
 }
 
 // Get returns an approval by ID.
@@ -195,4 +214,16 @@ func (e *AppError) Error() string { return e.Msg }
 
 func generateID() string {
 	return uuid.New().String()
+}
+
+func coreTimeout() time.Duration {
+	raw := os.Getenv("AGENTBRIDGE_CORE_TIMEOUT")
+	if raw == "" {
+		return defaultCoreTimeout
+	}
+	ms, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || ms < 0 {
+		return defaultCoreTimeout
+	}
+	return time.Duration(ms) * time.Millisecond
 }
