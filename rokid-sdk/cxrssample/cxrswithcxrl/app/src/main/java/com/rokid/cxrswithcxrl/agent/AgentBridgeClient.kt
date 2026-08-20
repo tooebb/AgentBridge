@@ -49,6 +49,7 @@ class AgentBridgeClient(
     private var closedByUser = false
     private var reconnectDelayMs = 2_000L
     private val reconnectTracker = ReconnectTracker()
+    private val actionDeduper = ActionDeduper()
     private val seenSeqs = linkedSetOf<Long>()
     private val seenMessageIds = linkedSetOf<String>()
 
@@ -82,6 +83,9 @@ class AgentBridgeClient(
         if (taskId.isBlank()) {
             listener.onError("No active task for action=$actionType", null)
             return false
+        }
+        if (!actionDeduper.shouldSend(taskId, actionType, System.currentTimeMillis())) {
+            return true
         }
         val message = ClientMessage(
             sessionId = sessionId,
