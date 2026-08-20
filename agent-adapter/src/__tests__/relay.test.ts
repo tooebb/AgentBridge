@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { ApprovalRelay, handleApprove } from '../relay.js';
+import { ApprovalRelay, handleApprove, handleSummary } from '../relay.js';
 import type { UnifiedMessage } from '../types.js';
 
 function makeRelay(timeoutMs: number, sent: UnifiedMessage[] = []) {
@@ -92,6 +92,62 @@ test('POST /approve returns allow after user action', async () => {
   const body = await resp.json() as { decision: string };
   assert.equal(resp.status, 200);
   assert.equal(body.decision, 'allow');
+
+  server.closeAllConnections();
+  await new Promise<void>((r) => server.close(() => r()));
+});
+
+test('handleSummaryText sends task_completed with summary', async () => {
+  const sent: UnifiedMessage[] = [];
+  const relay = new ApprovalRelay({
+    sendEvent: async (m) => { sent.push(m); },
+    sessionId: 'default',
+    timeoutMs: 0,
+    summarize: async () => 'mock summary',
+  });
+  await relay.handleSummaryText('some raw text');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].event_type, 'task_completed');
+  assert.equal(sent[0].body, 'mock summary');
+});
+
+test('handleSummaryText dedupes identical text', async () => {
+  const sent: UnifiedMessage[] = [];
+  const relay = new ApprovalRelay({
+    sendEvent: async (m) => { sent.push(m); },
+    sessionId: 'default',
+    timeoutMs: 0,
+    summarize: async () => 'mock summary',
+  });
+  await relay.handleSummaryText('same text');
+  await relay.handleSummaryText('same text');
+  assert.equal(sent.length, 1);
+});
+
+test('POST /summary returns 200 and sends card', async () => {
+  let eventSent!: (m: UnifiedMessage) => void;
+  const sentPromise = new Promise<UnifiedMessage>((r) => { eventSent = r; });
+  const relay = new ApprovalRelay({
+    sendEvent: async (m) => eventSent(m),
+    sessionId: 'default',
+    timeoutMs: 0,
+    summarize: async () => 'mock summary',
+  });
+
+  const server = createServer((req, res) => { void handleSummary(req, res, relay); });
+  await new Promise<void>((r) => server.listen(0, r));
+  const port = (server.address() as AddressInfo).port;
+
+  const resp = await fetch(`http://127.0.0.1:${port}/summary`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'some text' }),
+  });
+  assert.equal(resp.status, 200);
+
+  const msg = await sentPromise;
+  assert.equal(msg.event_type, 'task_completed');
+  assert.equal(msg.body, 'mock summary');
 
   server.closeAllConnections();
   await new Promise<void>((r) => server.close(() => r()));

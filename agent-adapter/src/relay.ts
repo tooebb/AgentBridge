@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { EventNormalizer } from './normalizer.js';
 import { AgentBridgeClient } from './ws-client.js';
+import { summarize as defaultSummarize } from './summarize.js';
 import type { AgentEvent } from './adapters/types.js';
 import type { UnifiedMessage } from './types.js';
 
@@ -25,6 +27,7 @@ export interface ApprovalRelayOptions {
   sessionId: string;
   agentId?: string;
   timeoutMs?: number;
+  summarize?: (text: string) => Promise<string>;
 }
 
 interface PendingApproval {
@@ -37,11 +40,14 @@ export class ApprovalRelay {
   private readonly normalizer: EventNormalizer;
   private readonly timeoutMs: number;
   private readonly pending = new Map<string, PendingApproval>();
+  private readonly summarize: (text: string) => Promise<string>;
+  private lastSummaryHash: string | null = null;
 
   constructor(options: ApprovalRelayOptions) {
     this.sendEvent = options.sendEvent;
     this.normalizer = new EventNormalizer(options.sessionId, options.agentId ?? 'claude-code');
     this.timeoutMs = options.timeoutMs ?? 120_000;
+    this.summarize = options.summarize ?? defaultSummarize;
   }
 
   requestApproval(req: ApprovalRequest): Promise<Decision> {
@@ -84,6 +90,15 @@ export class ApprovalRelay {
       pending.resolve('deny');
     }
   }
+
+  async handleSummaryText(text: string): Promise<void> {
+    const hash = createHash('sha256').update(text).digest('hex');
+    if (hash === this.lastSummaryHash) return;
+    this.lastSummaryHash = hash;
+    const summary = await this.summarize(text);
+    const msg = this.normalizer.fromAgentEvent({ type: 'done', text: summary });
+    await this.sendEvent(msg);
+  }
 }
 
 export interface ApprovalRequestBody {
@@ -110,6 +125,29 @@ export async function handleApprove(
     });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ decision }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'bad request' }));
+  }
+}
+
+export interface SummaryRequestBody {
+  text?: string;
+}
+
+export async function handleSummary(
+  req: IncomingMessage,
+  res: ServerResponse,
+  relay: ApprovalRelay,
+): Promise<void> {
+  try {
+    const body = await readJsonBody(req) as SummaryRequestBody;
+    const text = body.text ?? '';
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    if (text) {
+      void relay.handleSummaryText(text);
+    }
   } catch (err) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'bad request' }));
@@ -143,6 +181,10 @@ export async function main(): Promise<void> {
   const server = createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/approve') {
       void handleApprove(req, res, relay);
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/summary') {
+      void handleSummary(req, res, relay);
       return;
     }
     res.writeHead(404).end();
