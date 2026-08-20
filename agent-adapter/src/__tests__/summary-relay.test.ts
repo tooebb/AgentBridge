@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractLastAssistantText } from '../hooks/summary-relay.js';
+import { extractLastAssistantText, parseHookInput } from '../hooks/summary-relay.js';
 
 function line(obj: unknown): string {
   return JSON.stringify(obj);
@@ -56,4 +56,13 @@ test('skips non-end_turn assistant and finds earlier end_turn', () => {
     line({ type: 'assistant', message: { content: [{ type: 'text', text: 'ignored' }], stop_reason: 'tool_use' } }),
   ].join('\n');
   assert.equal(extractLastAssistantText(jsonl), 'first');
+});
+
+test('parseHookInput extracts transcript_path', () => {
+  const input = parseHookInput(JSON.stringify({ transcript_path: '/tmp/abc.jsonl', session_id: 's1' }));
+  assert.equal(input.transcriptPath, '/tmp/abc.jsonl');
+});
+
+test('parseHookInput tolerates missing transcript_path', () => {
+  assert.equal(parseHookInput('{}').transcriptPath, '');
 });
