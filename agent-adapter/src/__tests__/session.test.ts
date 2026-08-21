@@ -34,17 +34,23 @@ test('SessionBridge routes user_message to send and approve to handleUserAction'
   assert.equal(forwarded[0]?.body, 'echo hello');
 });
 
-test('SessionBridge emits task_blocked when a second user_message arrives while busy', async () => {
+test('SessionBridge queues a second user_message while busy instead of rejecting', async () => {
   let release!: () => void;
   const started = new Promise<void>((resolve) => {
     release = resolve;
   });
+  const sent: string[] = [];
   const forwarded: UnifiedMessage[] = [];
   const bridge = new SessionBridge({
     adapter: {
-      async *send() {
-        await started;
-        yield { type: 'task_completed', taskId: 't1', summary: 'done' } satisfies AgentEvent;
+      async *send(input: any) {
+        sent.push(input.text);
+        if (input.text === 'first') {
+          await started;
+          yield { type: 'task_completed', taskId: 't1', summary: 'done first' } satisfies AgentEvent;
+          return;
+        }
+        yield { type: 'task_completed', taskId: 't2', summary: 'done second' } satisfies AgentEvent;
       },
       async handleUserAction() {},
     },
@@ -61,7 +67,8 @@ test('SessionBridge emits task_blocked when a second user_message arrives while 
   release();
   await first;
 
-  assert.deepEqual(forwarded.map((msg) => msg.event_type), ['task_blocked', 'task_completed']);
+  assert.deepEqual(sent, ['first', 'second']);
+  assert.deepEqual(forwarded.map((msg) => msg.body), ['done first', 'done second']);
 });
 
 function messageFor(event: AgentEvent): UnifiedMessage {

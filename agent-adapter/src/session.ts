@@ -31,6 +31,7 @@ export class SessionBridge {
   private readonly normalizer?: SessionBridgeOptions['normalizer'];
   private readonly sessionId: string;
   private running = false;
+  private queue: { type: 'user_message'; text: string; taskId?: string }[] = [];
 
   constructor(options: SessionBridgeOptions) {
     this.adapter = options.adapter;
@@ -41,12 +42,8 @@ export class SessionBridge {
 
   async handleUserAction(action: UserActionInput): Promise<void> {
     if (action.type === 'user_message') {
-      await this.driveAgent({
-        type: 'user_message',
-        text: action.text ?? '',
-        taskId: action.taskId,
-        sessionId: this.sessionId,
-      });
+      this.queue.push({ type: 'user_message', text: action.text ?? '', taskId: action.taskId });
+      await this.drain();
       return;
     }
 
@@ -62,20 +59,21 @@ export class SessionBridge {
     await this.adapter.disconnect?.();
   }
 
-  private async driveAgent(input: AgentInput): Promise<void> {
-    if (this.running) {
-      await this.forward({
-        type: 'task_blocked',
-        taskId: input.taskId || input.sessionId || this.sessionId,
-        reason: 'Session is already processing a user message',
-      });
-      return;
-    }
-
+  private async drain(): Promise<void> {
+    if (this.running) return;
     this.running = true;
     try {
-      for await (const event of this.adapter.send(input)) {
-        await this.forward(event);
+      while (this.queue.length > 0) {
+        const next = this.queue.shift()!;
+        const input: AgentInput = {
+          type: 'user_message',
+          text: next.text,
+          taskId: next.taskId,
+          sessionId: this.sessionId,
+        };
+        for await (const event of this.adapter.send(input)) {
+          await this.forward(event);
+        }
       }
     } finally {
       this.running = false;
