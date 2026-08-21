@@ -1,6 +1,8 @@
 package com.rokid.cxrswithcxrl.activities.main
 
+import android.Manifest
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.PowerManager
 import android.util.Log
@@ -18,6 +20,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.rokid.cxrswithcxrl.agent.AgentBridgeScreen
 import com.rokid.cxrswithcxrl.agent.AgentCardState
 import com.rokid.cxrswithcxrl.agent.GestureHandler
+import com.rokid.cxrswithcxrl.agent.MicProbe
 import com.rokid.cxrswithcxrl.receiver.KeyReceiver
 import com.rokid.cxrswithcxrl.receiver.KeyType
 import com.rokid.cxrswithcxrl.ui.theme.CXRSWithCXRLTheme
@@ -69,6 +72,40 @@ class MainActivity : ComponentActivity() {
                 addAction(it.action)
             }
         })
+        startMicProbe()
+    }
+
+    private fun startMicProbe() {
+        if (MicProbe.permissionGranted(this)) {
+            runMicProbe()
+        } else {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
+        }
+    }
+
+    private fun runMicProbe() {
+        Thread {
+            MicProbe.run(this) { viewModel.showMicResult(it) }
+        }.start()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_MIC) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                runMicProbe()
+            } else {
+                viewModel.showMicResult("MIC: permission denied")
+            }
+        }
+    }
+
+    companion object {
+        private const val REQ_MIC = 101
     }
 
     override fun onDestroy() {

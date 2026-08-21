@@ -371,6 +371,10 @@ class MainViewModel: ViewModel() {
         _capsFromClient.value = "INPUT: $msg"
     }
 
+    fun showMicResult(msg: String) {
+        _capsFromClient.value = msg
+    }
+
     fun onGesture(actionType: String) {
         val handler = actionHandler
         if (handler == null) {
