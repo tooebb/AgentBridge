@@ -178,6 +178,27 @@ test('ClaudeCodeAdapter auto-allows pending permissions after timeout', async ()
   assert.deepEqual(await nextValue(iter), { type: 'task_completed', taskId: 'session-1', summary: 'done after timeout' });
 });
 
+test('ClaudeCodeAdapter resumes session for user_message inputs', async () => {
+  const resumeIds: (string | undefined)[] = [];
+  const adapter = new ClaudeCodeAdapter({
+    sessionId: 'session-1',
+    queryFactory: ({ options }) => {
+      resumeIds.push(options?.resume);
+      const q = (async function* () {
+        yield sdkInit('session-abc');
+        yield sdkResult('session-abc', 'done');
+      })() as Query;
+      q.close = () => undefined;
+      return q;
+    },
+  });
+
+  for await (const _ of adapter.send({ type: 'start_task', text: 'first', sessionId: 'session-1' })) {}
+  for await (const _ of adapter.send({ type: 'user_message', text: 'second', sessionId: 'session-1' })) {}
+
+  assert.deepEqual(resumeIds, [undefined, 'session-abc']);
+});
+
 function makeQueryFactory(generator: (options: Options) => AsyncGenerator<SDKMessage, void>): ClaudeQueryFactory {
   return ({ options }) => {
     const q = generator(options || {}) as Query;

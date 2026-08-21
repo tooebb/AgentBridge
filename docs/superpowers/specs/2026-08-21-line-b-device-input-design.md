@@ -14,6 +14,14 @@
 - **音频输入可用，音频输出(TTS)不可用**：`TextToSpeech` 死在 init（「音频引擎初始化失败」）。所以线 B 输入走语音，输出走文字。
 - **Rokid 云 ASR 需 AK/SK（没有）**，眼镜锁 ROM 大概率无 Google 语音服务 → STT 必须 PC 端自建。
 
+## 当前仓库落地状态（2026-08-21）
+
+- 眼镜端已有麦克风探针代码：`rokid-sdk/cxrssample/cxrswithcxrl/app/src/main/java/com/rokid/cxrswithcxrl/agent/MicProbe.kt`。
+- 探针使用 `AudioRecord`、16kHz、mono、PCM16；输出 `samples/peak/rms`，方便真机判断底噪与说话时信噪比。
+- 探针统计逻辑已拆成 `MicProbeStats`，由 JVM 单测覆盖；Android 设备 API 仍只在真机/模拟器运行时验证。
+- `MainActivity` 启动时请求 `RECORD_AUDIO`，授权后后台执行一次 15s 探针；Activity 销毁时会停止探针循环。
+- `agent-adapter` 已支持文字多轮会话控制层的基础实现：`ClaudeCodeAdapter` 对后续 `user_message` 使用 SDK `resume`，并新增 `SessionBridge` daemon 入口 `npm run start:session`。
+
 ## 一次语音交互的数据流
 
 ```
@@ -83,6 +91,7 @@
 - `ClaudeCodeAdapter` 多轮：首轮 `query`、次轮 `resume`（mock `queryFactory` 断言 `options.resume` 传入正确 session_id）
 - STT 断句逻辑（VAD）
 - 眼镜端录音开关状态机
+- 麦克风探针统计：`samples`、`peak`、`rms` 和进度文案格式
 
 **E2E 真机场景**（复用 Phase 2/3a 方法论）：
 1. 眼镜点击 → 说一句话 → PC STT 转文字 → 喂会话 → agent 文字回复回传眼镜

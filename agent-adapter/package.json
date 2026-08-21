@@ -6,9 +6,10 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/__tests__/risk.test.js dist/__tests__/claude.test.js dist/__tests__/hub.test.js dist/__tests__/normalizer.test.js dist/__tests__/relay.test.js dist/__tests__/approval-relay.test.js dist/__tests__/summary-relay.test.js dist/__tests__/summarize.test.js",
+    "test": "npm run build && node --test dist/__tests__/risk.test.js dist/__tests__/claude.test.js dist/__tests__/hub.test.js dist/__tests__/normalizer.test.js dist/__tests__/relay.test.js dist/__tests__/approval-relay.test.js dist/__tests__/summary-relay.test.js dist/__tests__/summarize.test.js dist/__tests__/session.test.js",
     "start": "node dist/index.js",
     "start:relay": "node dist/relay.js",
+    "start:session": "node dist/session.js",
     "dev": "node --loader ts-node/esm src/index.ts"
   },
   "dependencies": {

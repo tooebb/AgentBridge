@@ -10,6 +10,34 @@ import android.util.Log
 import kotlin.math.abs
 import kotlin.math.sqrt
 
+data class MicProbeSnapshot(
+    val samples: Long,
+    val peak: Double,
+    val rms: Double,
+)
+
+class MicProbeStats {
+    private var samples = 0L
+    private var sumSq = 0.0
+    private var peak = 0.0
+
+    fun add(buffer: ShortArray, count: Int) {
+        if (count <= 0) return
+        for (i in 0 until count.coerceAtMost(buffer.size)) {
+            val v = buffer[i].toDouble()
+            sumSq += v * v
+            val a = abs(v)
+            if (a > peak) peak = a
+        }
+        samples += count.coerceAtMost(buffer.size)
+    }
+
+    fun snapshot(): MicProbeSnapshot {
+        val rms = if (samples > 0) sqrt(sumSq / samples) else 0.0
+        return MicProbeSnapshot(samples = samples, peak = peak, rms = rms)
+    }
+}
+
 object MicProbe {
     private const val TAG = "MICPROBE"
     private const val SAMPLE_RATE = 16000
@@ -20,7 +48,11 @@ object MicProbe {
         context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
-    fun run(context: Context, onUpdate: (String) -> Unit) {
+    fun run(
+        context: Context,
+        shouldContinue: () -> Boolean = { true },
+        onUpdate: (String) -> Unit,
+    ) {
         Log.d(TAG, "probe start")
         if (!permissionGranted(context)) {
             onUpdate("MIC: no RECORD_AUDIO")
@@ -66,27 +98,18 @@ object MicProbe {
         }
 
         val buffer = ShortArray(minBuf)
-        var samples = 0L
-        var sumSq = 0.0
-        var peak = 0.0
+        val stats = MicProbeStats()
         var lastReport = System.currentTimeMillis()
         val start = System.currentTimeMillis()
         try {
-            while (System.currentTimeMillis() - start < CAPTURE_MS) {
+            while (shouldContinue() && System.currentTimeMillis() - start < CAPTURE_MS) {
                 val n = record.read(buffer, 0, buffer.size)
                 if (n > 0) {
-                    for (i in 0 until n) {
-                        val v = buffer[i].toDouble()
-                        sumSq += v * v
-                        val a = abs(v)
-                        if (a > peak) peak = a
-                    }
-                    samples += n
+                    stats.add(buffer, n)
                 }
                 val now = System.currentTimeMillis()
                 if (now - lastReport >= CHUNK_MS) {
-                    val rms = if (samples > 0) sqrt(sumSq / samples) else 0.0
-                    onUpdate("MIC: peak=%.0f rms=%.0f".format(peak, rms))
+                    onUpdate(formatProgress("MIC", stats.snapshot()))
                     lastReport = now
                 }
             }
@@ -94,8 +117,12 @@ object MicProbe {
             try { record.stop() } catch (_: Exception) {}
             record.release()
         }
-        val rms = if (samples > 0) sqrt(sumSq / samples) else 0.0
-        onUpdate("MIC DONE: peak=%.0f rms=%.0f".format(peak, rms))
-        Log.d(TAG, "done peak=$peak rms=$rms samples=$samples")
+        val snapshot = stats.snapshot()
+        onUpdate(formatProgress("MIC DONE", snapshot))
+        Log.d(TAG, "done peak=${snapshot.peak} rms=${snapshot.rms} samples=${snapshot.samples}")
+    }
+
+    fun formatProgress(prefix: String, snapshot: MicProbeSnapshot): String {
+        return "$prefix: samples=${snapshot.samples} peak=%.0f rms=%.0f".format(snapshot.peak, snapshot.rms)
     }
 }

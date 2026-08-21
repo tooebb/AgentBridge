@@ -8,6 +8,8 @@
 
 **Tech Stack:** TypeScript, `@anthropic-ai/claude-agent-sdk` v0.3.232, Node 22, node:test + assert.
 
+**Implementation status (2026-08-21):** Task 1 and Task 2 are implemented in this branch. `agent-adapter` test suite passes locally (`42` tests). Task 3 remains a Core-level E2E validation step because it requires running Core plus a real or mocked Claude session.
+
 ## Global Constraints
 
 - 不改 AgentBridge 消息协议（`ClientMessage`/`ClientAction`/`UnifiedMessage` 结构不变）；文字输入复用现有 `ClientAction.text` 字段（`ws-client.ts` 已透传 `user_action.text`）。
@@ -28,7 +30,7 @@
 - Consumes: `SDKMessage`（带 `session_id`）、`Options.resume?: string`、现有 `ClaudeQueryFactory`
 - Produces: `ClaudeCodeAdapter` 新增私有字段 `lastSessionId: string | null`；`send()` 对 `type === 'user_message'` 且已有 `lastSessionId` 的输入，在 `options.resume` 传入上一次的 `session_id`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `claude.test.ts` 末尾追加：
 
@@ -55,12 +57,12 @@ test('ClaudeCodeAdapter resumes session for user_message inputs', async () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd agent-adapter && npm test`
 Expected: FAIL — `resumeIds` 实际为 `[undefined, undefined]`，因为 `send()` 尚未传 `resume`。
 
-- [ ] **Step 3: 实现 resume**
+- [x] **Step 3: 实现 resume**
 
 在 `adapters/claude.ts`：
 
@@ -92,7 +94,7 @@ if ('session_id' in message && message.session_id) {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `cd agent-adapter && npm test`
 Expected: 全绿（新增测试 PASS，其余 claude/hub/risk/normalizer 测试仍 PASS）。
@@ -116,7 +118,7 @@ git commit -m "feat(adapter): resume same session for multi-turn user messages"
 - Consumes: `ClaudeCodeAdapter`（Task 1）、`AgentBridgeClient`（`ws-client.js`）、`EventNormalizer`
 - Produces: `SessionBridge` 类（可测）— `handleUserAction(action)` 按 `type` 分流（`user_message` → 驱动 `send`；`approve`/`reject`/`continue` → `adapter.handleUserAction`）；`session.ts` 入口 `main()` 把 `SessionBridge` 接到真实 `AgentBridgeClient`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `session.test.ts`：
 
@@ -150,12 +152,12 @@ test('SessionBridge routes user_message to send and approve to handleUserAction'
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd agent-adapter && npm test`
 Expected: FAIL — 找不到 `../session.js`（模块不存在）。
 
-- [ ] **Step 3: 实现 SessionBridge + session.ts**
+- [x] **Step 3: 实现 SessionBridge + session.ts**
 
 `session.ts`：
 
@@ -231,7 +233,7 @@ if (process.argv[1] && import.meta.url === (await import('node:url')).pathToFile
 
 在 `package.json` 的 `scripts` 加：`"start:session": "node dist/session.js"`，并加进 `test` 脚本列表：`dist/__tests__/session.test.js`。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `cd agent-adapter && npm test`
 Expected: 全绿。

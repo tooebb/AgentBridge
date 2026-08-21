@@ -38,6 +38,9 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var viewModel: MainViewModel
     private lateinit var wakeLock: PowerManager.WakeLock
+    @Volatile
+    private var micProbeRunning = false
+    private var micProbeThread: Thread? = null
     private val gestureHandler = GestureHandler { actionType ->
         viewModel.onGesture(actionType)
     }
@@ -84,9 +87,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun runMicProbe() {
-        Thread {
-            MicProbe.run(this) { viewModel.showMicResult(it) }
-        }.start()
+        if (micProbeThread?.isAlive == true) {
+            return
+        }
+        micProbeRunning = true
+        micProbeThread = Thread {
+            MicProbe.run(
+                context = this,
+                shouldContinue = { micProbeRunning },
+            ) { viewModel.showMicResult(it) }
+        }.apply {
+            name = "MicProbe"
+            start()
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -109,6 +122,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        micProbeRunning = false
+        micProbeThread?.interrupt()
         gestureHandler.destroy()
         unregisterReceiver(viewModel.keyReceiver)
         if (wakeLock.isHeld) {

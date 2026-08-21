@@ -56,6 +56,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
   private pendingPermission: PendingPermission | null = null;
   private activeQuery: Query | null = null;
   private currentTaskId: string | null = null;
+  private lastSessionId: string | null = null;
   private lastAssistantText = '';
 
   constructor(options: ClaudeAdapterOptions) {
@@ -97,22 +98,30 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
 
     this.on('event', onAdapterEvent);
     try {
+      const options: Options = {
+        abortController,
+        canUseTool: this.canUseTool,
+        cwd: process.cwd(),
+        env: claudeRuntimeEnv(),
+        pathToClaudeCodeExecutable: this.claudePath,
+        permissionMode: 'default',
+      };
+      if (input.type === 'user_message' && this.lastSessionId) {
+        options.resume = this.lastSessionId;
+      }
+
       q = this.queryFactory({
         prompt: input.text || this.inputFallbackText(input),
-        options: {
-          abortController,
-          canUseTool: this.canUseTool,
-          cwd: process.cwd(),
-          env: claudeRuntimeEnv(),
-          pathToClaudeCodeExecutable: this.claudePath,
-          permissionMode: 'default',
-        },
+        options,
       });
       this.activeQuery = q;
 
       void (async () => {
         try {
           for await (const message of q!) {
+            if ('session_id' in message && message.session_id) {
+              this.lastSessionId = message.session_id;
+            }
             const event = mapClaudeSDKMessage(message, taskId);
             if (event) {
               if (event.type === 'text') {
