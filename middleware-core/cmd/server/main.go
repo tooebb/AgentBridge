@@ -285,6 +285,9 @@ func (s *Server) onDeviceMessage(sessionID string, msg *domain.ClientMessage) {
 		// TODO: push a raw evidence payload back to the device.
 		log.Printf("server: view_details requested for task %s by device %s",
 			msg.TaskID, msg.Action.DeviceType)
+
+	case domain.ActionUserMessage:
+		s.relayUserAction(sessionID, msg)
 	}
 }
 

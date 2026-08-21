@@ -64,6 +64,7 @@ const (
 	ActionApprove     ActionType = "approve"
 	ActionReject      ActionType = "reject"
 	ActionViewDetails ActionType = "view_details"
+	ActionUserMessage ActionType = "user_message"
 )
 
 // AvailableAction describes a single action the user can take.
