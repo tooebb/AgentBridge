@@ -71,6 +71,75 @@ test('SessionBridge queues a second user_message while busy instead of rejecting
   assert.deepEqual(forwarded.map((msg) => msg.body), ['done first', 'done second']);
 });
 
+test('SessionBridge keeps draining queued user_message when forwarding fails', async () => {
+  const sent: string[] = [];
+  const forwarded: string[] = [];
+  let attempts = 0;
+  const bridge = new SessionBridge({
+    adapter: {
+      async *send(input: any) {
+        sent.push(input.text);
+        yield {
+          type: 'task_completed',
+          taskId: input.taskId,
+          summary: `done ${input.text}`,
+        } satisfies AgentEvent;
+      },
+      async handleUserAction() {},
+    },
+    normalizer: {
+      fromAgentEvent(event: AgentEvent) {
+        return messageFor(event);
+      },
+    },
+    sendEvent: async (msg) => {
+      attempts++;
+      if (attempts === 1) {
+        throw new Error('core unavailable');
+      }
+      forwarded.push(msg.body);
+    },
+  });
+
+  await bridge.handleUserAction({ type: 'user_message', text: 'first', taskId: 't1' });
+  await bridge.handleUserAction({ type: 'user_message', text: 'second', taskId: 't2' });
+
+  assert.deepEqual(sent, ['first', 'second']);
+  assert.deepEqual(forwarded, ['done second']);
+});
+
+test('audio utterance transcribes and drives the session bridge wiring', async () => {
+  const sent: string[] = [];
+  const bridge = new SessionBridge({
+    adapter: {
+      async *send(input: any) {
+        sent.push(input.text);
+        yield {
+          type: 'task_completed',
+          taskId: input.taskId,
+          summary: `echo ${input.text}`,
+        } satisfies AgentEvent;
+      },
+      async handleUserAction() {},
+    },
+    normalizer: {
+      fromAgentEvent(event: AgentEvent) {
+        return messageFor(event);
+      },
+    },
+    sendEvent: async () => {},
+  });
+
+  const onUtterance = async (_pcm: Buffer, _sampleRate: number) => {
+    const text = '你好';
+    if (text) await bridge.handleUserAction({ type: 'user_message', text });
+  };
+
+  await onUtterance(Buffer.alloc(1600), 16000);
+
+  assert.deepEqual(sent, ['你好']);
+});
+
 function messageFor(event: AgentEvent): UnifiedMessage {
   const body = 'content' in event ? event.content
     : 'summary' in event ? event.summary

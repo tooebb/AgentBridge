@@ -23,6 +23,8 @@ import com.rokid.cxrswithcxrl.agent.ConnectionResolver
 import com.rokid.cxrswithcxrl.agent.ConnectionTarget
 import com.rokid.cxrswithcxrl.agent.DeviceMessage
 import com.rokid.cxrswithcxrl.agent.DiscoveredService
+import com.rokid.cxrswithcxrl.agent.VoiceCapture
+import com.rokid.cxrswithcxrl.agent.VoiceCaptureState
 import com.rokid.cxrswithcxrl.receiver.KeyEventListener
 import com.rokid.cxrswithcxrl.receiver.KeyReceiver
 import com.rokid.cxrswithcxrl.receiver.KeyType
@@ -48,6 +50,9 @@ class MainViewModel: ViewModel() {
     private val cxrBridge = CXRServiceBridge()
     private var agentClient: AgentBridgeClient? = null
     private var actionHandler: AgentActionHandler? = null
+    private var voiceCapture: VoiceCapture? = null
+    private var discoveredHost: String? = null
+    private val audioPort = 8788
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var connectionStarted = false
 
@@ -288,6 +293,7 @@ class MainViewModel: ViewModel() {
     private fun connectResolved(context: Context, handler: AgentActionHandler, target: ConnectionTarget) {
         if (connectionStarted || agentClient != null) return
         connectionStarted = true
+        discoveredHost = target.host
         val url = target.wsUrl
         netInfo = "$netInfo | serverUrl=$url"
         _debugStatus.value = debugText("resolved")
@@ -383,7 +389,11 @@ class MainViewModel: ViewModel() {
         }
         val taskId = agentCard.value.taskId
         if (taskId.isBlank()) {
-            _capsFromClient.value = "INPUT: no task taskId='$taskId'"
+            if (actionType == "approve") {
+                toggleVoice()
+            } else {
+                _capsFromClient.value = "INPUT: no task taskId='$taskId'"
+            }
             return
         }
         val client = agentClient
@@ -394,6 +404,32 @@ class MainViewModel: ViewModel() {
         val sent = client.sendAction(taskId, actionType)
         _capsFromClient.value = "INPUT: sendAction=$sent taskId=$taskId action=$actionType"
         _agentCard.value = handler.onGestureResult(actionType, sent)
+    }
+
+    fun toggleVoice() {
+        val current = voiceCapture
+        if (current != null && current.state == VoiceCaptureState.RECORDING) {
+            current.stop()
+            _capsFromClient.value = "VOICE: stopped"
+            return
+        }
+
+        val host = discoveredHost
+        if (host.isNullOrBlank()) {
+            _capsFromClient.value = "VOICE: no discovered PC host"
+            return
+        }
+
+        val capture = VoiceCapture(
+            onState = { state ->
+                _capsFromClient.value = "VOICE: ${state.name.lowercase()}"
+            },
+            onError = { error ->
+                _capsFromClient.value = "VOICE: $error"
+            },
+        )
+        voiceCapture = capture
+        capture.start("ws://$host:$audioPort")
     }
 
     private fun parseCaps(caps: Caps): String {
@@ -422,6 +458,7 @@ class MainViewModel: ViewModel() {
     }
 
     override fun onCleared() {
+        voiceCapture?.stop()
         agentClient?.disconnect()
         actionHandler?.close()
         try { wifiLock?.release() } catch (_: Exception) {}

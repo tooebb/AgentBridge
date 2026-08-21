@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { ClaudeCodeAdapter } from './adapters/claude.js';
 import { AgentBridgeClient } from './ws-client.js';
 import { EventNormalizer } from './normalizer.js';
+import { AudioServer } from './audio-server.js';
+import { transcribe } from './stt.js';
 import type { AgentEvent, AgentInput, DeviceAction } from './adapters/types.js';
 import type { UnifiedMessage } from './types.js';
 
@@ -82,7 +84,11 @@ export class SessionBridge {
 
   private async forward(event: AgentEvent): Promise<void> {
     const msg = this.normalizer ? this.normalizer.fromAgentEvent(event) : eventToMessage(event, this.sessionId);
-    await this.sendEvent(msg);
+    try {
+      await this.sendEvent(msg);
+    } catch (err) {
+      console.warn('[session] failed to forward agent event:', err instanceof Error ? err.message : err);
+    }
   }
 }
 
@@ -100,6 +106,7 @@ export async function main(): Promise<void> {
     sessionId,
     sendEvent: (msg) => wsClient.sendEvent(msg),
   });
+  let audioServer: AudioServer | null = null;
 
   wsClient.on('user_action', (action) => {
     void bridge.handleUserAction(action as UserActionInput).catch((err) => {
@@ -110,16 +117,35 @@ export async function main(): Promise<void> {
   wsClient.on('disconnected', () => console.warn('[session] disconnected from middleware core, will retry...'));
   wsClient.on('error', (err) => console.error('[session] ws error:', err.message));
 
-  process.on('SIGINT', async () => {
+  const shutdown = async () => {
+    audioServer?.close();
     await bridge.close();
     wsClient.close();
     process.exit(0);
-  });
-  process.on('SIGTERM', async () => {
-    await bridge.close();
-    wsClient.close();
-    process.exit(0);
-  });
+  };
+  process.on('SIGINT', () => { void shutdown(); });
+  process.on('SIGTERM', () => { void shutdown(); });
+
+  const audioPort = Number(process.env.AGENTBRIDGE_AUDIO_PORT || 0);
+  if (audioPort > 0) {
+    audioServer = new AudioServer({
+      port: audioPort,
+      vad: { sampleRate: 16000, speechThreshold: 100, silenceMs: 600, preRollMs: 200 },
+      onUtterance: async (pcm, sampleRate) => {
+        try {
+          const text = await transcribe(pcm, sampleRate);
+          console.log(`[session] STT: ${text}`);
+          if (text) {
+            await bridge.handleUserAction({ type: 'user_message', text });
+          }
+        } catch (err) {
+          console.error('[session] STT failed:', err instanceof Error ? err.message : err);
+        }
+      },
+    });
+    await audioServer.start();
+    console.log(`[session] audio server listening on :${audioPort}`);
+  }
 
   wsClient.connect();
 }
