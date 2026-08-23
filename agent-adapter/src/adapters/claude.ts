@@ -10,6 +10,7 @@ import {
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { assessRisk, DEFAULT_RISK_THRESHOLD } from '../risk.js';
+import { resolveLatestSessionId } from '../session-resolver.js';
 import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types.js';
 
 export interface ClaudeAdapterOptions {
@@ -20,6 +21,8 @@ export interface ClaudeAdapterOptions {
   riskThreshold?: number;
   approvalTimeoutMs?: number;
   queryFactory?: ClaudeQueryFactory;
+  cwd?: string;
+  initialSessionId?: string;
 }
 
 export type ClaudeQueryFactory = (params: {
@@ -58,6 +61,8 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
   private currentTaskId: string | null = null;
   private lastSessionId: string | null = null;
   private lastAssistantText = '';
+  private readonly cwd: string;
+  private readonly initialSessionId: string | null;
 
   constructor(options: ClaudeAdapterOptions) {
     super();
@@ -66,6 +71,8 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
     this.queryFactory = options.queryFactory || query;
     this.riskThreshold = options.riskThreshold ?? Number(process.env.AGENTBRIDGE_RISK_THRESHOLD || DEFAULT_RISK_THRESHOLD);
     this.approvalTimeoutMs = options.approvalTimeoutMs ?? Number(process.env.AGENTBRIDGE_CORE_TIMEOUT || 120_000);
+    this.cwd = options.cwd || process.env.AGENTBRIDGE_CWD || process.cwd();
+    this.initialSessionId = options.initialSessionId || process.env.AGENTBRIDGE_RESUME_SESSION || null;
   }
 
   async connect(): Promise<void> {
@@ -101,13 +108,16 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
       const options: Options = {
         abortController,
         canUseTool: this.canUseTool,
-        cwd: process.cwd(),
+        cwd: this.cwd,
         env: claudeRuntimeEnv(),
         pathToClaudeCodeExecutable: this.claudePath,
         permissionMode: 'default',
       };
-      if (input.type === 'user_message' && this.lastSessionId) {
-        options.resume = this.lastSessionId;
+      if (input.type === 'user_message') {
+        const resume = this.lastSessionId ?? this.initialSessionId ?? resolveLatestSessionId(this.cwd);
+        if (resume) {
+          options.resume = resume;
+        }
       }
 
       q = this.queryFactory({

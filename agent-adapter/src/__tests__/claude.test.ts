@@ -182,6 +182,8 @@ test('ClaudeCodeAdapter resumes session for user_message inputs', async () => {
   const resumeIds: (string | undefined)[] = [];
   const adapter = new ClaudeCodeAdapter({
     sessionId: 'session-1',
+    cwd: 'C:\\nonexistent',
+    initialSessionId: 'pc-session-123',
     queryFactory: ({ options }) => {
       resumeIds.push(options?.resume);
       const q = (async function* () {
@@ -197,6 +199,28 @@ test('ClaudeCodeAdapter resumes session for user_message inputs', async () => {
   for await (const _ of adapter.send({ type: 'user_message', text: 'second', sessionId: 'session-1' })) {}
 
   assert.deepEqual(resumeIds, [undefined, 'session-abc']);
+});
+
+test('ClaudeCodeAdapter uses configured cwd and resumes initial session on first user_message', async () => {
+  const seen: { cwd?: string; resume?: string }[] = [];
+  const adapter = new ClaudeCodeAdapter({
+    sessionId: 'session-1',
+    cwd: 'C:\\proj',
+    initialSessionId: 'pc-session-123',
+    queryFactory: ({ options }) => {
+      seen.push({ cwd: options?.cwd, resume: options?.resume });
+      const q = (async function* () {
+        yield sdkInit('pc-session-123');
+        yield sdkResult('pc-session-123', 'done');
+      })() as Query;
+      q.close = () => undefined;
+      return q;
+    },
+  });
+
+  for await (const _ of adapter.send({ type: 'user_message', text: 'continue', sessionId: 'session-1' })) {}
+
+  assert.deepEqual(seen, [{ cwd: 'C:\\proj', resume: 'pc-session-123' }]);
 });
 
 function makeQueryFactory(generator: (options: Options) => AsyncGenerator<SDKMessage, void>): ClaudeQueryFactory {
