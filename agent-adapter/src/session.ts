@@ -5,7 +5,7 @@ import { ClaudeCodeAdapter } from './adapters/claude.js';
 import { AgentBridgeClient } from './ws-client.js';
 import { EventNormalizer } from './normalizer.js';
 import { AudioServer } from './audio-server.js';
-import { transcribe } from './stt.js';
+import { closeStt, transcribe } from './stt.js';
 import type { AgentEvent, AgentInput, DeviceAction } from './adapters/types.js';
 import type { UnifiedMessage } from './types.js';
 
@@ -121,6 +121,7 @@ export async function main(): Promise<void> {
     audioServer?.close();
     await bridge.close();
     wsClient.close();
+    closeStt();
     process.exit(0);
   };
   process.on('SIGINT', () => { void shutdown(); });
@@ -130,16 +131,18 @@ export async function main(): Promise<void> {
   if (audioPort > 0) {
     audioServer = new AudioServer({
       port: audioPort,
-      vad: { sampleRate: 16000, speechThreshold: 100, silenceMs: 600, preRollMs: 200 },
+      vad: { sampleRate: 16000, speechThreshold: 60, silenceMs: 1000, preRollMs: 400 },
       onUtterance: async (pcm, sampleRate) => {
         try {
           const text = await transcribe(pcm, sampleRate);
           console.log(`[session] STT: ${text}`);
+          await wsClient.sendEvent(userInputEvent(sessionId, text || '（未识别到语音）'));
           if (text) {
             await bridge.handleUserAction({ type: 'user_message', text });
           }
         } catch (err) {
           console.error('[session] STT failed:', err instanceof Error ? err.message : err);
+          await wsClient.sendEvent(userInputEvent(sessionId, '（语音识别失败）'));
         }
       },
     });
@@ -152,6 +155,23 @@ export async function main(): Promise<void> {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   void main();
+}
+
+export function userInputEvent(sessionId: string, text: string): UnifiedMessage {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    task_id: sessionId,
+    session_id: sessionId,
+    event_type: 'user_input',
+    title: '语音输入',
+    body: text,
+    severity: 'info',
+    risk_score: 0,
+    risk_blocked: false,
+    available_actions: [],
+    timestamp: new Date().toISOString(),
+    agent_id: 'claude-cli',
+  };
 }
 
 function eventToMessage(event: AgentEvent, sessionId: string): UnifiedMessage {

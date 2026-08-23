@@ -100,7 +100,7 @@ object CardStateMachine {
     }
 
     fun onViewDetails(current: AgentCardState): AgentCardState =
-        if (current.details.isNotBlank()) current.copy(detailsVisible = !current.detailsVisible) else current
+        current.copy(detailsVisible = !current.detailsVisible)
 
     fun resetToIdle(current: AgentCardState): AgentCardState =
         AgentCardState(connectionLabel = current.connectionLabel)

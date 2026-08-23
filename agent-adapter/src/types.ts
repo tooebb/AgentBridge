@@ -7,6 +7,7 @@ export type EventType =
   | 'needs_approval'
   | 'task_failed'
   | 'task_completed'
+  | 'user_input'
   | 'user_action';
 
 export type Severity = 'info' | 'warning' | 'critical';

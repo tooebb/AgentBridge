@@ -118,12 +118,15 @@ export class AudioServer {
   }
 
   private handleConnection(ws: WebSocket): void {
+    console.log('[audio] device connected');
     const vad = new VadSegmenter(this.opts.vad);
     ws.on('message', (data) => {
       const chunk = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
       const utterance = vad.push(chunk);
       if (!utterance) return;
 
+      const durationMs = Math.round(utterance.length / 2 / (this.opts.vad.sampleRate / 1000));
+      console.log(`[audio] utterance finalized: ${utterance.length} bytes (~${durationMs}ms)`);
       void Promise.resolve(this.opts.onUtterance(utterance, this.opts.vad.sampleRate)).catch((err) => {
         console.error('[audio] failed to handle utterance:', err instanceof Error ? err.message : err);
       });
@@ -131,5 +134,6 @@ export class AudioServer {
         ws.send(JSON.stringify({ type: 'stop' }));
       }
     });
+    ws.on('close', () => console.log('[audio] device disconnected'));
   }
 }

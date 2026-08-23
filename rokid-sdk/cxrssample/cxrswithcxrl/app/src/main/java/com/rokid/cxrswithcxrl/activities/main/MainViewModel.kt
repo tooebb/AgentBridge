@@ -44,6 +44,9 @@ class MainViewModel: ViewModel() {
     private val _debugStatus = MutableStateFlow("init")
     val debugStatus = _debugStatus.asStateFlow()
 
+    private val _voiceStatus = MutableStateFlow("")
+    val voiceStatus = _voiceStatus.asStateFlow()
+
     private val _agentCard = MutableStateFlow(AgentCardState())
     val agentCard = _agentCard.asStateFlow()
 
@@ -335,6 +338,10 @@ class MainViewModel: ViewModel() {
                 }
 
                 override fun onMessage(message: DeviceMessage, duplicate: Boolean) {
+                    when (message.event?.eventType) {
+                        "user_input" -> _voiceStatus.value = "已识别: ${message.event?.body.orEmpty()}（处理中…）"
+                        "task_completed", "task_failed", "needs_approval" -> _voiceStatus.value = ""
+                    }
                     _agentCard.value = handler.reduce(message, duplicate)
                     _debugStatus.value = debugText(
                         if (duplicate) "duplicate ignored"
@@ -423,6 +430,10 @@ class MainViewModel: ViewModel() {
         val capture = VoiceCapture(
             onState = { state ->
                 _capsFromClient.value = "VOICE: ${state.name.lowercase()}"
+                _voiceStatus.value = when (state) {
+                    VoiceCaptureState.RECORDING -> "聆听中…"
+                    VoiceCaptureState.IDLE -> "识别中…"
+                }
             },
             onError = { error ->
                 _capsFromClient.value = "VOICE: $error"

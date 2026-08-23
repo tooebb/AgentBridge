@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SessionBridge } from '../session.js';
+import { SessionBridge, userInputEvent } from '../session.js';
 import type { AgentEvent } from '../adapters/types.js';
 import type { UnifiedMessage } from '../types.js';
 
@@ -138,6 +138,21 @@ test('audio utterance transcribes and drives the session bridge wiring', async (
   await onUtterance(Buffer.alloc(1600), 16000);
 
   assert.deepEqual(sent, ['你好']);
+});
+
+test('userInputEvent creates a core-compatible voice echo event', () => {
+  const msg = userInputEvent('session-1', '你好');
+
+  assert.equal(msg.task_id, 'session-1');
+  assert.equal(msg.session_id, 'session-1');
+  assert.equal(msg.event_type, 'user_input');
+  assert.equal(msg.title, '语音输入');
+  assert.equal(msg.body, '你好');
+  assert.equal(msg.severity, 'info');
+  assert.equal(msg.risk_score, 0);
+  assert.equal(msg.risk_blocked, false);
+  assert.deepEqual(msg.available_actions, []);
+  assert.equal(msg.agent_id, 'claude-cli');
 });
 
 function messageFor(event: AgentEvent): UnifiedMessage {

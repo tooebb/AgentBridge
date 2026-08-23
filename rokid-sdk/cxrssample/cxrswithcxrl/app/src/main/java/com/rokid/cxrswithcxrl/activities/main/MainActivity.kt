@@ -186,7 +186,13 @@ fun MainScreen(viewModel: MainViewModel) {
     val fromClient by viewModel.capsFromClient.collectAsState()
     val agentCard by viewModel.agentCard.collectAsState()
     val debugStatus by viewModel.debugStatus.collectAsState()
-    AgentBridgeScreen(card = agentCard, capsFromClient = fromClient, debugStatus = debugStatus)
+    val voiceStatus by viewModel.voiceStatus.collectAsState()
+    AgentBridgeScreen(
+        card = agentCard,
+        capsFromClient = fromClient,
+        debugStatus = debugStatus,
+        voiceStatus = voiceStatus
+    )
 }
 
 @Preview(showBackground = true)

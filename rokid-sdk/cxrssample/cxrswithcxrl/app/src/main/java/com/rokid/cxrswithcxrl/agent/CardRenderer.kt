@@ -23,7 +23,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun AgentBridgeScreen(card: AgentCardState, capsFromClient: String, debugStatus: String = "") {
+fun AgentBridgeScreen(
+    card: AgentCardState,
+    capsFromClient: String,
+    debugStatus: String = "",
+    voiceStatus: String = ""
+) {
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -37,6 +42,16 @@ fun AgentBridgeScreen(card: AgentCardState, capsFromClient: String, debugStatus:
             verticalArrangement = Arrangement.Center
         ) {
             ConnectionHeader(card)
+            if (voiceStatus.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = voiceStatus,
+                    color = Color(0xFF8AB4F8),
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             if (debugStatus.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -52,7 +67,7 @@ fun AgentBridgeScreen(card: AgentCardState, capsFromClient: String, debugStatus:
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = capsFromClient,
-                color = Color(0xFF8FBF8F),
+                color = if (voiceStatus.isBlank()) Color(0xFF8FBF8F) else Color(0xFF5F6368),
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -104,7 +119,7 @@ private fun AgentCard(card: AgentCardState) {
                 text = if (card.detailsVisible && card.details.isNotBlank()) card.details else card.body,
                 color = Color(0xFFE8EAED),
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = if (card.detailsVisible) 10 else 4,
+                maxLines = if (card.detailsVisible) Int.MAX_VALUE else 4,
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(12.dp))

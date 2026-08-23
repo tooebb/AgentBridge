@@ -126,6 +126,6 @@ class AgentActionHandler(
 
     companion object {
         private const val TAG = "AgentActionHandler"
-        private const val AUTO_CLEAR_DELAY_MS = 3000L
+        private const val AUTO_CLEAR_DELAY_MS = 15000L
     }
 }

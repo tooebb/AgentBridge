@@ -107,7 +107,10 @@ class CardStateMachineTest {
     }
 
     @Test
-    fun onViewDetails_noopWhenDetailsEmpty() {
-        assertFalse(CardStateMachine.onViewDetails(AgentCardState(details = "")).detailsVisible)
+    fun onViewDetails_togglesEvenWhenDetailsEmpty() {
+        val state = AgentCardState(body = "回复正文", details = "")
+        val toggled = CardStateMachine.onViewDetails(state)
+        assertTrue(toggled.detailsVisible)
+        assertFalse(CardStateMachine.onViewDetails(toggled).detailsVisible)
     }
 }
