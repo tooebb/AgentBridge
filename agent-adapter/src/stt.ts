@@ -41,7 +41,9 @@ export async function transcribe(pcm: Buffer, sampleRate: number, opts: SttOptio
 
 function runPython(python: string, script: string, wavPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(python, [script, wavPath]);
+    const child = spawn(python, [script, wavPath], {
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+    });
     let stdout = '';
     let stderr = '';
 

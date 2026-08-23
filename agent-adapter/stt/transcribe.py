@@ -3,6 +3,8 @@ import sys
 
 from faster_whisper import WhisperModel
 
+sys.stdout.reconfigure(encoding="utf-8")
+
 
 def main():
     if len(sys.argv) != 2:
