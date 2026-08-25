@@ -41,3 +41,7 @@ temp_test.txt
 
 # AgentBridge session handoff
 .agentbridge-current-session
+
+# AgentBridge one-click startup runtime
+.run/
+logs/

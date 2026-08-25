@@ -151,12 +151,9 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - 主动 ack 补全（当前 seq 去重已覆盖核心场景）
 - 认证/安全层
 
-**环境启动必查**：
-- Core 端口 → `AGENTBRIDGE_ADDR=":8088"`（避免 NI Application Web Server 抢占 8080）
-- Agent Adapter → `AGENTBRIDGE_SESSION=default`（与眼镜同 session）
-- 眼镜连接 → 见「眼镜连接模式」：无线优先 mDNS，失败后手动 IP，再 fallback 到 ADB 隧道
-- 双设备 → 手机 `4EU0221B11003871` + 眼镜 `1901092534002787`
-- 守护进程 → `scripts/tunnel-watchdog.ps1` 保持运行
+**环境启动必查（推荐一键）**：
+- 冷启动：`.\scripts\start-all.ps1`（Core + STT + watchdog + session.js）；切换项目：`cd 目标项目` 后 `.\scripts\start-session.ps1`；关底座：`.\scripts\stop-core.ps1`。详见 `docs/superpowers/specs/2026-08-25-one-click-startup-design.md`。
+- 手动清单（备查）：Core `AGENTBRIDGE_ADDR=":8088"` / Adapter `AGENTBRIDGE_SESSION=default` / 眼镜连接见「眼镜连接模式」/ 双设备 `4EU0221B11003871` + `1901092534002787` / watchdog `scripts\tunnel-watchdog.ps1`。
 
 ### CXR-L SDK 联调
 
