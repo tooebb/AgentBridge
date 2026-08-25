@@ -88,7 +88,7 @@ function Wait-Health {
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
         try {
-            $resp = Invoke-WebRequest -Uri $Url -TimeoutSec 2 -ErrorAction Stop
+            $resp = Invoke-WebRequest -Uri $Url -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
             if ($resp.StatusCode -eq 200) {
                 return $true
             }

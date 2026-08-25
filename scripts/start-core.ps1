@@ -13,7 +13,7 @@ $coreDir = Join-Path $toolRoot 'middleware-core'
 $adapterDir = Join-Path $toolRoot 'agent-adapter'
 $coreExe = Join-Path $coreDir 'bin\core.exe'
 $coreUrl = "http://localhost:$CorePort"
-$sttUrl = "http://localhost:$SttPort"
+$sttUrl = "http://127.0.0.1:$SttPort"
 
 $corePid = Read-Pid -Root $toolRoot -Name 'core'
 if ($corePid -and (Test-ProcessAlive -Pid $corePid) -and (Test-PortListening -Port $CorePort)) {
@@ -59,7 +59,7 @@ if ($sttPid -and (Test-ProcessAlive -Pid $sttPid) -and (Test-PortListening -Port
         -WorkingDirectory $adapterDir -Env @{ AGENTBRIDGE_STT_PORT = "$SttPort" } `
         -LogFile (Join-Path $toolRoot 'logs\stt.log') | Out-Null
 
-    if (-not (Wait-Health -Url "$sttUrl/health" -TimeoutSec 60 -IntervalSec 1)) {
+    if (-not (Wait-Health -Url "$sttUrl/health" -TimeoutSec 180 -IntervalSec 1)) {
         Get-Content (Join-Path $toolRoot 'logs\stt.log') -Tail 40 -ErrorAction SilentlyContinue
         Get-Content (Join-Path $toolRoot 'logs\stt.log.err') -Tail 40 -ErrorAction SilentlyContinue
         throw "STT unhealthy on :$SttPort"

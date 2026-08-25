@@ -27,7 +27,7 @@ while ($true) {
     } catch { }
 
     try {
-        $health = Invoke-WebRequest -Uri $coreHealth -TimeoutSec 3 -ErrorAction Stop
+        $health = Invoke-WebRequest -Uri $coreHealth -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
         if ($health.StatusCode -ne 200) { continue }
     } catch {
         continue
@@ -60,7 +60,7 @@ while ($true) {
         $needRecreate = -not ($tunnel -match "tcp:19090")
         if (-not $needRecreate) {
             try {
-                $test = Invoke-WebRequest -Uri "http://127.0.0.1:19090/health" -TimeoutSec 3 -ErrorAction Stop
+                $test = Invoke-WebRequest -Uri "http://127.0.0.1:19090/health" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
                 if ($test.StatusCode -ne 200) { $needRecreate = $true }
             } catch {
                 $needRecreate = $true
