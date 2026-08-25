@@ -38,3 +38,6 @@ Thumbs.db
 *.db-wal
 *.db-shm
 temp_test.txt
+
+# AgentBridge session handoff
+.agentbridge-current-session

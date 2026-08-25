@@ -10,7 +10,7 @@ import {
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { assessRisk, DEFAULT_RISK_THRESHOLD } from '../risk.js';
-import { resolveLatestSessionId } from '../session-resolver.js';
+import { resolveLatestSessionId, resolveSessionFile, persistSessionId } from '../session-resolver.js';
 import type { AdapterCapability, AgentAdapter, AgentEvent, AgentInput, DeviceAction } from './types.js';
 
 export interface ClaudeAdapterOptions {
@@ -117,6 +117,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
         const resume = this.lastSessionId ?? this.initialSessionId ?? resolveLatestSessionId(this.cwd);
         if (resume) {
           options.resume = resume;
+          persistSessionId(resolveSessionFile(this.cwd), resume);
         }
       }
 
@@ -131,6 +132,7 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
           for await (const message of q!) {
             if ('session_id' in message && message.session_id) {
               this.lastSessionId = message.session_id;
+              persistSessionId(resolveSessionFile(this.cwd), message.session_id);
             }
             const event = mapClaudeSDKMessage(message, taskId);
             if (event) {

@@ -1,9 +1,9 @@
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 export function encodeProjectDir(cwd: string): string {
-  return cwd.replace(/[\\:]/g, '-');
+  return cwd.replace(/[^a-zA-Z0-9-]/g, '-');
 }
 
 export function resolveLatestSessionId(
@@ -33,4 +33,16 @@ export function resolveLatestSessionId(
   }
 
   return latest?.id ?? null;
+}
+
+export function resolveSessionFile(cwd: string): string {
+  return process.env.AGENTBRIDGE_SESSION_FILE || join(cwd, '.agentbridge-current-session');
+}
+
+export function persistSessionId(file: string, sessionId: string): void {
+  try {
+    writeFileSync(file, sessionId + '\n', 'utf8');
+  } catch {
+    // Best-effort: failing to record the session id must not break the conversation.
+  }
 }
