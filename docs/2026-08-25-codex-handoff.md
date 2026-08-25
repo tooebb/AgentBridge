@@ -17,7 +17,12 @@
 - spec: `docs/superpowers/specs/2026-08-25-one-click-startup-design.md`
 - plan: `docs/superpowers/plans/2026-08-25-one-click-startup-plan.md`（10 个 TDD 任务）
 
-**目标**：把线 B 语音会话的 PC 环境拆成「全局底座」（Core/STT/watchdog，与项目无关）和「项目会话」（session.js，随项目切换）。冷启动一条命令 `start-all.ps1` 拉起全部；换项目只切会话层、不动底座。
+**两个目标，一次完成：**
+
+- **目标一：环境自动化。** 把线 B 语音会话每次启动要手动准备的四样东西（Core、STT、watchdog、session.js）自动化——冷启动一条命令 `start-all.ps1` 拉起全部，`stop-core.ps1` 对称关停。
+- **目标二：项目切换。** 四样里前三个（Core/STT/watchdog）是 PC 全局服务、与项目无关；只有 session.js 随项目走。切项目时只切会话层、不动全局底座（旧方案换项目要全量重启 STT，浪费几十秒加载模型）。日常切项目：`cd 目标项目` 后 `.\scripts\start-session.ps1`，`-Cwd` 默认当前目录，免填路径。
+
+架构即「全局底座」（Core/STT/watchdog）+「项目会话」（session.js）两层分离。
 
 **关键约束（写代码前必读 plan 的 Global Constraints 小节）**：
 - 不改 Core 协议、不改 AgentBridgeClient 消息协议、审批链路不变（纯运维脚本层）。
