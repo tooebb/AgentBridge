@@ -122,6 +122,27 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 
 自动镜像依赖 Claude Code hook。若以 `--bare` 或 `--settings '{"disableAllHooks":true}'` 启动 claude，hook 不加载，眼镜将不会收到审批卡片。这是 Claude Code 的 CLI 设计，非 AgentBridge 可封堵；请勿在需要眼镜监督的场景下使用这些参数。
 
+#### 会话交接（出门 / 回家接力）
+
+眼镜和 PC 终端轮流 resume 同一个 Claude Code 会话，实现「PC 做一半 → 出门眼镜继续 → 回家 PC 继续」。核心机制：daemon 每次 resume 时把活跃 session id 写进 `<Cwd>\.agentbridge-current-session`（`.gitignore` 已忽略），两个脚本都读它，免去手动输入完整 UUID。
+
+| 脚本 | 作用 | 命令 |
+|------|------|------|
+| `scripts/start-session.ps1` | 启动眼镜 daemon，自动 resume 落盘会话（出门接力） | `.\scripts\start-session.ps1` |
+| `scripts/resume-glasses.ps1` | PC 终端 resume 眼镜刚用过的会话（回家接力） | `.\scripts\resume-glasses.ps1` |
+
+**关键约束：接力是顺序的，不是并发的。** 同一个会话的 `.jsonl` 不能被两个进程同时写。切换前必须先关掉正在 hold 该会话的进程：
+
+- **出门接力（PC → 眼镜）**：PC 终端 Ctrl+C 关掉 `claude` → 确认 Core 仍在 `:8088` → `.\scripts\start-session.ps1` → 眼镜连上自动 resume。
+- **回家接力（眼镜 → PC）**：停掉 session.js daemon → `.\scripts\resume-glasses.ps1`（自动 `claude -r <id>`）。
+
+`start-session.ps1` 支持 `-Cwd <dir>` 指定项目目录、`-ResumeSession <id>` 显式钉住某个会话（省略则读落盘文件，再回退到该 cwd 下 mtime 最新的会话）。
+
+**实操注意（真机验证过的坑）**：
+- 两个脚本和 `.agentbridge-current-session` 都在**项目根**，不在 `agent-adapter\` 下；跑之前确认提示符停在 `...\AgentBridge-master>`。
+- `start-session.ps1` 结尾会 `Set-Location` 到 `agent-adapter` 再跑 daemon，Ctrl+C 停掉后提示符**留在 `agent-adapter`**。切回 PC 先 `cd ..` 回项目根再 `resume-glasses.ps1`。
+- Core 是常驻服务，跟「在哪个终端窗口启动」无关；另开窗口跑脚本不会让 Core 消失，判断标准是进程还在不在（`netstat -ano | findstr :8088`）。
+
 **Phase 2 刻意推迟到 Phase 3 的项目**：
 - TTS 真机验证（代码已写，音频引擎初始化失败，需排查 Rokid 音频路由）
 - 语音审批（依赖 TTS 可用）
