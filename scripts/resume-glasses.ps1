@@ -7,7 +7,7 @@
 #   .\scripts\resume-glasses.ps1 -Cwd D:\path\to\proj   # point at a specific project dir
 
 param(
-  [string]$Cwd = "D:\project\5project\AgentBridge-master"
+  [string]$Cwd = (Get-Location).Path
 )
 
 $ErrorActionPreference = "Stop"

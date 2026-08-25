@@ -14,7 +14,7 @@
 # "出门接力" mode. Pass -ResumeSession <id> to pin a specific session.
 
 param(
-  [string]$Cwd = "D:\project\5project\AgentBridge-master",
+  [string]$Cwd = (Get-Location).Path,
   [string]$ResumeSession = "",
   [string]$Url = "http://localhost:8088",
   [string]$Session = "default",
@@ -23,6 +23,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. "$PSScriptRoot\lib-agentbridge.ps1"
 
 # If no explicit session is pinned, resume the session the daemon last
 # recorded (written to .agentbridge-current-session by the adapter on resume).
@@ -31,17 +32,13 @@ if ($ResumeSession -eq "" -and (Test-Path $sessionFile)) {
   $ResumeSession = (Get-Content $sessionFile -Raw).Trim()
 }
 
-$adapterDir = "D:\project\5project\AgentBridge-master\agent-adapter"
+$adapterDir = Join-Path (Resolve-ToolRoot) 'agent-adapter'
 
-$env:AGENTBRIDGE_CWD = $Cwd
-$env:AGENTBRIDGE_URL = $Url
-$env:AGENTBRIDGE_SESSION = $Session
-$env:AGENTBRIDGE_AUDIO_PORT = $AudioPort
-$env:AGENTBRIDGE_PYTHON = $Python
-
-if ($ResumeSession -ne "") {
-  $env:AGENTBRIDGE_RESUME_SESSION = $ResumeSession
-} else {
+$envMap = Get-AgentBridgeEnv -Cwd $Cwd -Url $Url -Session $Session -AudioPort $AudioPort -Python $Python -ResumeSession $ResumeSession
+foreach ($k in $envMap.Keys) {
+  Set-Item "Env:\$k" $envMap[$k]
+}
+if ($ResumeSession -eq "") {
   Remove-Item Env:\AGENTBRIDGE_RESUME_SESSION -ErrorAction SilentlyContinue
 }
 
