@@ -27,7 +27,8 @@ fun AgentBridgeScreen(
     card: AgentCardState,
     capsFromClient: String,
     debugStatus: String = "",
-    voiceStatus: String = ""
+    voiceStatus: String = "",
+    showDebug: Boolean = false
 ) {
     Surface(
         modifier = Modifier
@@ -41,7 +42,7 @@ fun AgentBridgeScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.Center
         ) {
-            ConnectionHeader(card)
+            ConnectionHeader(card, showDebug)
             if (voiceStatus.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -52,7 +53,7 @@ fun AgentBridgeScreen(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (debugStatus.isNotBlank()) {
+            if (showDebug && debugStatus.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = debugStatus,
@@ -63,21 +64,23 @@ fun AgentBridgeScreen(
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
-            AgentCard(card)
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = capsFromClient,
-                color = if (voiceStatus.isBlank()) Color(0xFF8FBF8F) else Color(0xFF5F6368),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            AgentCard(card, showDebug)
+            if (showDebug) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = capsFromClient,
+                    color = if (voiceStatus.isBlank()) Color(0xFF8FBF8F) else Color(0xFF5F6368),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ConnectionHeader(card: AgentCardState) {
+private fun ConnectionHeader(card: AgentCardState, showDebug: Boolean = false) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
@@ -89,17 +92,19 @@ private fun ConnectionHeader(card: AgentCardState) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Text(
-            text = "ack=${card.lastAckedSeq}",
-            color = Color(0xFF9AA0A6),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1
-        )
+        if (showDebug) {
+            Text(
+                text = "ack=${card.lastAckedSeq}",
+                color = Color(0xFF9AA0A6),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1
+            )
+        }
     }
 }
 
 @Composable
-private fun AgentCard(card: AgentCardState) {
+private fun AgentCard(card: AgentCardState, showDebug: Boolean = false) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -130,14 +135,16 @@ private fun AgentCard(card: AgentCardState) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = card.statusLine,
-                color = Color(0xFFBDC1C6),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (showDebug) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = card.statusLine,
+                    color = Color(0xFFBDC1C6),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

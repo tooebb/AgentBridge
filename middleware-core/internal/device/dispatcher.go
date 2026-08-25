@@ -78,6 +78,7 @@ func (d *Dispatcher) glassTaskStarted(msg *domain.UnifiedMessage) *domain.Device
 		TTSText:      "",
 		CardTitle:    "◤ " + truncate(msg.Title, 50),
 		CardBody:     glassSummary(msg.Body, 150),
+		CardDetails:  msg.Body,
 		QuickActions: nil,
 		RenderHint:   "status_card",
 	}
@@ -88,6 +89,7 @@ func (d *Dispatcher) glassTaskRunning(msg *domain.UnifiedMessage) *domain.Device
 		TTSText:      "",
 		CardTitle:    "◉ " + truncate(msg.Title, 50),
 		CardBody:     glassSummary(msg.Body, 150),
+		CardDetails:  msg.Body,
 		QuickActions: nil,
 		RenderHint:   "status_card",
 	}
@@ -102,6 +104,7 @@ func (d *Dispatcher) glassTaskBlocked(msg *domain.UnifiedMessage) *domain.Device
 		TTSText:      fmt.Sprintf("任务阻塞: %s", msg.Title),
 		CardTitle:    "⚠ 阻塞: " + truncate(msg.Title, 45),
 		CardBody:     glassSummary(msg.Body, 180),
+		CardDetails:  msg.Body,
 		QuickActions: actions,
 		RenderHint:   "actionable_card",
 	}
@@ -142,6 +145,7 @@ func (d *Dispatcher) glassTaskFailed(msg *domain.UnifiedMessage) *domain.DeviceO
 		TTSText:      fmt.Sprintf("任务失败: %s", msg.Title),
 		CardTitle:    "✕ 失败: " + truncate(msg.Title, 48),
 		CardBody:     glassSummary(msg.Body, 200),
+		CardDetails:  msg.Body,
 		QuickActions: []string{"view_details"},
 		RenderHint:   "alert_card",
 	}
@@ -152,6 +156,7 @@ func (d *Dispatcher) glassTaskCompleted(msg *domain.UnifiedMessage) *domain.Devi
 		TTSText:      fmt.Sprintf("完成: %s", msg.Title),
 		CardTitle:    "✓ " + truncate(msg.Title, 52),
 		CardBody:     glassSummary(msg.Body, 120),
+		CardDetails:  msg.Body,
 		QuickActions: nil,
 		RenderHint:   "status_card",
 	}
@@ -167,6 +172,7 @@ func (d *Dispatcher) glassDefault(msg *domain.UnifiedMessage) *domain.DeviceOutp
 		TTSText:      tts,
 		CardTitle:    truncate(msg.Title, 52),
 		CardBody:     truncate(msg.Body, 150),
+		CardDetails:  msg.Body,
 		QuickActions: actions,
 		RenderHint:   "card",
 	}

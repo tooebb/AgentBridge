@@ -57,20 +57,29 @@ while ($true) {
         if (-not $available) { continue }
 
         $tunnel = & $adb -s $device reverse --list 2>$null
-        if ($tunnel -match "tcp:19090") {
+        $needRecreate = -not ($tunnel -match "tcp:19090")
+        if (-not $needRecreate) {
             try {
                 $test = Invoke-WebRequest -Uri "http://127.0.0.1:19090/health" -TimeoutSec 3 -ErrorAction Stop
-                if ($test.StatusCode -eq 200) { continue }
+                if ($test.StatusCode -ne 200) { $needRecreate = $true }
             } catch {
-                Write-Host "[watchdog] $(Get-Date -Format 'HH:mm:ss') $device tunnel dead, recreating..."
+                $needRecreate = $true
             }
-        } else {
-            Write-Host "[watchdog] $(Get-Date -Format 'HH:mm:ss') $device tunnel missing, creating..."
         }
 
-        & $adb -s $device reverse --remove-all 2>$null
-        Start-Sleep -Seconds 1
-        & $adb -s $device reverse tcp:19090 tcp:8088
-        Write-Host "[watchdog] $(Get-Date -Format 'HH:mm:ss') $device tunnel recreated"
+        # Glasses also needs the audio tunnel (8788) for voice -> STT; without it
+        # the glasses sends audio to its own localhost:8788 and STT never fires.
+        $needAudio = ($device -eq $glassesDev) -and -not ($tunnel -match "tcp:8788")
+
+        if ($needRecreate) {
+            & $adb -s $device reverse --remove-all 2>$null
+            Start-Sleep -Seconds 1
+            & $adb -s $device reverse tcp:19090 tcp:8088
+            Write-Host "[watchdog] $(Get-Date -Format 'HH:mm:ss') $device tunnel recreated"
+        }
+        if ($needAudio) {
+            & $adb -s $device reverse tcp:8788 tcp:8788
+            Write-Host "[watchdog] $(Get-Date -Format 'HH:mm:ss') $device audio tunnel recreated"
+        }
     }
 }

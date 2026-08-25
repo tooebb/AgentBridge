@@ -25,3 +25,10 @@ test('fromAgentEvent leaves details empty for non-approval events', () => {
   const result = normalizer.fromAgentEvent({ type: 'task_completed', taskId: 'session-1', summary: 'done' });
   assert.equal(result.details ?? '', '');
 });
+
+test('fromAgentEvent preserves full text body for text events', () => {
+  const normalizer = new EventNormalizer('session-1');
+  const longText = 'x'.repeat(1200);
+  const result = normalizer.fromAgentEvent({ type: 'text', content: longText });
+  assert.equal(result.body, longText);
+});

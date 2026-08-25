@@ -210,6 +210,41 @@ func TestGlassSummary_AllWhitespace(t *testing.T) {
 	}
 }
 
+func TestForGlass_SummarizedEvents_PreserveFullBodyInCardDetails(t *testing.T) {
+	d := NewDispatcher()
+	fullBody := "First line\nSecond line\nThird line with extra detail beyond the summary"
+	types := []domain.EventType{
+		domain.EventTaskStarted,
+		domain.EventTaskRunning,
+		domain.EventTaskBlocked,
+		domain.EventTaskFailed,
+		domain.EventTaskCompleted,
+	}
+	for _, et := range types {
+		t.Run(string(et), func(t *testing.T) {
+			msg := newMsg(et, "Title", fullBody, domain.SeverityInfo, 0, nil)
+			out := d.forGlass(msg)
+			if out.CardDetails != fullBody {
+				t.Errorf("CardDetails = %q, want full body %q", out.CardDetails, fullBody)
+			}
+			if out.CardBody == fullBody {
+				t.Errorf("CardBody = %q, should stay a compact summary, not the full body", out.CardBody)
+			}
+		})
+	}
+}
+
+func TestForGlass_Default_PreservesFullBodyInCardDetails(t *testing.T) {
+	d := NewDispatcher()
+	fullBody := "user input body text"
+	msg := newMsg(domain.EventHeartbeat, "Title", fullBody, domain.SeverityInfo, 0, nil)
+	out := d.forGlass(msg)
+
+	if out.CardDetails != fullBody {
+		t.Errorf("CardDetails = %q, want %q", out.CardDetails, fullBody)
+	}
+}
+
 func TestForGlass_AllSixEventTypesProduceOutput(t *testing.T) {
 	d := NewDispatcher()
 	types := []domain.EventType{

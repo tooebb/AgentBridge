@@ -280,7 +280,7 @@ export class EventNormalizer {
         return {
           eventType: 'task_running',
           title: 'Agent output',
-          body: event.content.slice(0, 500),
+          body: event.content,
           severity: 'info',
         };
     }
