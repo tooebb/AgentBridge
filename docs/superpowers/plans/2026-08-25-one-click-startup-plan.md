@@ -1,10 +1,10 @@
-# 一键启动/关闭（线 B 全量环境）Implementation Plan
+# 分层启动/切换（全局底座 + 项目会话）Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 用 `start-all.ps1` / `stop-all.ps1` 一键拉起/关闭线 B 语音会话的 Core + STT + watchdog + session.js 四类进程。
+**Goal:** 分层管理线 B 语音会话的 PC 端环境——`start-core.ps1` 起全局底座（Core+STT+watchdog，一次长期跑），`start-session.ps1` 起/切项目会话（默认当前目录，免填路径），切换项目不重起底座。
 
-**Architecture:** 新增共享库 `lib-agentbridge.ps1`（纯函数：PID 读写、进程/端口/健康探测、环境变量组装、后台进程启动），两个编排脚本调用它；用 PID 文件（`.run/*.pid`）+ 端口健康检查做幂等启动与精确关闭。
+**Architecture:** 共享库 `lib-agentbridge.ps1`（纯函数：工具根定位、PID 读写、进程/端口/健康探测、环境变量组装、后台进程启动）+ 分层编排脚本。全局底座 PID/日志在「工具根」，项目会话落盘 `.agentbridge-current-session` 在「项目 cwd」，两者分离。
 
 **Tech Stack:** Windows PowerShell 5.1、Pester 5（单测）、Go build（Core 二进制）、faster_whisper（STT，已被 transcribe_server.py 封装）。
 
@@ -12,19 +12,21 @@
 
 - 不改 Core 协议、不改 AgentBridgeClient 消息协议、审批链路不变（纯运维脚本层）。
 - 脚本兼容 Windows PowerShell 5.1：禁用 `&&`、`||`、`??`、`?.`、三元表达式。
-- 日常使用命令必须零参数可用（`.\scripts\start-all.ps1` / `.\scripts\stop-all.ps1`）。
-- PID 文件目录 `.run/`、日志目录 `logs/`、`middleware-core/bin/core.exe` 必须被 `.gitignore` 忽略。
+- 日常使用命令零参数可用：冷启动 `.\scripts\start-all.ps1`；切换项目 `cd 目标项目` 后 `.\scripts\start-session.ps1`。
+- 换项目不重起全局底座。
+- 工具根从 `$PSScriptRoot` 推导，不写死绝对路径；`-Cwd` 默认 `(Get-Location).Path`。
+- 工具根 `.run/`、`logs/`、`middleware-core/bin/core.exe` 必须被 `.gitignore` 忽略。
 
 ---
 
-### Task 1: Pester 基础设施 + lib PID 函数
+### Task 1: Pester 基础设施 + 工具根定位 + PID 函数
 
 **Files:**
 - Create: `scripts/lib-agentbridge.ps1`
 - Create: `scripts/tests/lib-agentbridge.Tests.ps1`
 
 **Interfaces:**
-- Produces: `Write-Pid -Root <string> -Name <string> -Pid <int>`、`Read-Pid -Root <string> -Name <string>`（返回 `[int]` 或 `$null`）、`Remove-Pid -Root <string> -Name <string>`。PID 文件位于 `<Root>\.run\<Name>.pid`。
+- Produces: `Resolve-ToolRoot`（无参数，返回 `[string]` = `$PSScriptRoot` 上一级）、`Write-Pid -Root <string> -Name <string> -Pid <int>`、`Read-Pid -Root <string> -Name <string>`（返回 `[int]` 或 `$null`）、`Remove-Pid -Root <string> -Name <string>`。PID 文件位于 `<Root>\.run\<Name>.pid`。
 
 - [ ] **Step 1: 安装 Pester 5**
 
@@ -47,6 +49,14 @@ BeforeAll {
 }
 AfterAll {
     Remove-Item $testRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+Describe 'Resolve-ToolRoot' {
+    It 'returns repo root containing agent-adapter and middleware-core' {
+        $root = Resolve-ToolRoot
+        (Test-Path (Join-Path $root 'agent-adapter')) | Should -Be $true
+        (Test-Path (Join-Path $root 'middleware-core')) | Should -Be $true
+    }
 }
 
 Describe 'PID helpers' {
@@ -79,13 +89,17 @@ Describe 'PID helpers' {
 - [ ] **Step 3: 跑测试确认失败**
 
 Run: `Invoke-Pester -Path scripts/tests/lib-agentbridge.Tests.ps1 -Output Detailed`
-Expected: FAIL，报 `The term 'Write-Pid' is not recognized`。
+Expected: FAIL，报 `The term 'Resolve-ToolRoot' is not recognized`。
 
 - [ ] **Step 4: 实现最小代码**
 
 创建 `scripts/lib-agentbridge.ps1`：
 
 ```powershell
+function Resolve-ToolRoot {
+    return Split-Path $PSScriptRoot -Parent
+}
+
 function Write-Pid {
     param([string]$Root, [string]$Name, [int]$Pid)
     $runDir = Join-Path $Root '.run'
@@ -114,13 +128,13 @@ function Remove-Pid {
 - [ ] **Step 5: 跑测试确认通过**
 
 Run: `Invoke-Pester -Path scripts/tests/lib-agentbridge.Tests.ps1 -Output Detailed`
-Expected: 5/5 PASS。
+Expected: 6/6 PASS。
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add scripts/lib-agentbridge.ps1 scripts/tests/lib-agentbridge.Tests.ps1
-git commit -m "feat(scripts): add PID helpers to lib-agentbridge with Pester tests"
+git commit -m "feat(scripts): add tool-root + PID helpers to lib-agentbridge"
 ```
 
 ---
@@ -133,11 +147,10 @@ git commit -m "feat(scripts): add PID helpers to lib-agentbridge with Pester tes
 
 **Interfaces:**
 - Produces: `Test-ProcessAlive -Pid <int>`（返回 `[bool]`）、`Test-PortListening -Port <int>`（返回 `[bool]`）、`Wait-Health -Url <string> -TimeoutSec <int> -IntervalSec <int>`（返回 `[bool]`）。
-- Consumes: 无（独立函数）。
 
 - [ ] **Step 1: 写失败测试**
 
-在 `scripts/tests/lib-agentbridge.Tests.ps1` 追加：
+追加：
 
 ```powershell
 Describe 'probe helpers' {
@@ -174,11 +187,11 @@ Describe 'probe helpers' {
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `Invoke-Pester -Path scripts/tests/lib-agentbridge.Tests.ps1 -Output Detailed`
-Expected: 新增 7 个用例 FAIL，报函数未定义。
+Expected: 新增 7 个用例 FAIL。
 
 - [ ] **Step 3: 实现最小代码**
 
-在 `scripts/lib-agentbridge.ps1` 追加：
+追加：
 
 ```powershell
 function Test-ProcessAlive {
@@ -211,7 +224,7 @@ function Wait-Health {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `Invoke-Pester -Path scripts/tests/lib-agentbridge.Tests.ps1 -Output Detailed`
-Expected: 12/12 PASS。
+Expected: 13/13 PASS。
 
 - [ ] **Step 5: Commit**
 
@@ -229,7 +242,7 @@ git commit -m "feat(scripts): add process/port/health probe helpers"
 - Modify: `scripts/tests/lib-agentbridge.Tests.ps1`
 
 **Interfaces:**
-- Produces: `Get-AgentBridgeEnv -Cwd <string> -Url <string> -Session <string> -AudioPort <int> -Python <string> [-ResumeSession <string>]`（返回 `[hashtable]`，key 为 `AGENTBRIDGE_CWD`/`AGENTBRIDGE_URL`/`AGENTBRIDGE_SESSION`/`AGENTBRIDGE_AUDIO_PORT`/`AGENTBRIDGE_PYTHON`，`-ResumeSession` 非空时额外含 `AGENTBRIDGE_RESUME_SESSION`）。
+- Produces: `Get-AgentBridgeEnv -Cwd <string> -Url <string> -Session <string> -AudioPort <int> -Python <string> [-ResumeSession <string>]`（返回 `[hashtable]`）。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -291,7 +304,7 @@ function Get-AgentBridgeEnv {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `Invoke-Pester -Path scripts/tests/lib-agentbridge.Tests.ps1 -Output Detailed`
-Expected: 15/15 PASS。
+Expected: 16/16 PASS。
 
 - [ ] **Step 5: Commit**
 
@@ -309,7 +322,7 @@ git commit -m "feat(scripts): add Get-AgentBridgeEnv helper"
 - Modify: `scripts/tests/lib-agentbridge.Tests.ps1`
 
 **Interfaces:**
-- Produces: `Start-BackgroundProcess -Root <string> -Name <string> -FilePath <string> -ArgumentList <string[]> -WorkingDirectory <string> [-Env <hashtable>] [-LogFile <string>]`（返回 `[System.Diagnostics.Process]`，内部写 `<Root>\.run\<Name>.pid`，创建 `<Root>\logs\` 目录；`-LogFile` 提供时用 `-RedirectStandardOutput` 到 `<LogFile>`、`-RedirectStandardError` 到 `<LogFile>.err`）。
+- Produces: `Start-BackgroundProcess -Root <string> -Name <string> -FilePath <string> -ArgumentList <string[]> -WorkingDirectory <string> [-Env <hashtable>] [-LogFile <string>]`（返回 `[Process]`，写 `<Root>\.run\<Name>.pid`，建 `<Root>\logs\`）。
 - Consumes: `Write-Pid`（Task 1）。
 
 - [ ] **Step 1: 写失败测试**
@@ -334,7 +347,7 @@ Describe 'Start-BackgroundProcess' {
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `Invoke-Pester -Path scripts/tests/lib-agentbridge.Tests.ps1 -Output Detailed`
-Expected: 新增用例 FAIL，报函数未定义。
+Expected: 新增用例 FAIL。
 
 - [ ] **Step 3: 实现最小代码**
 
@@ -379,7 +392,7 @@ function Start-BackgroundProcess {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `Invoke-Pester -Path scripts/tests/lib-agentbridge.Tests.ps1 -Output Detailed`
-Expected: 16/16 PASS。
+Expected: 17/17 PASS。
 
 - [ ] **Step 5: Commit**
 
@@ -390,14 +403,228 @@ git commit -m "feat(scripts): add Start-BackgroundProcess helper"
 
 ---
 
-### Task 5: `start-all.ps1` 编排（真机冒烟）
+### Task 5: `start-core.ps1` 起全局底座（冒烟）
+
+**Files:**
+- Create: `scripts/start-core.ps1`
+
+**Interfaces:**
+- Consumes: 所有 lib 函数（Task 1–4）。
+- Produces: 顶层脚本，参数 `-CorePort`/`-SttPort`/`-Python`/`-SkipWatchdog`（默认值见 spec）。
+
+- [ ] **Step 1: 写脚本**
+
+创建 `scripts/start-core.ps1`：
+
+```powershell
+param(
+    [int]$CorePort = 8088,
+    [int]$SttPort = 8790,
+    [string]$Python = "D:\environment\Python 3.13.7\python.exe",
+    [switch]$SkipWatchdog
+)
+
+$ErrorActionPreference = "Stop"
+. "$PSScriptRoot\lib-agentbridge.ps1"
+
+$toolRoot   = Resolve-ToolRoot
+$coreDir    = Join-Path $toolRoot 'middleware-core'
+$adapterDir = Join-Path $toolRoot 'agent-adapter'
+$coreExe    = Join-Path $coreDir 'bin\core.exe'
+$coreUrl    = "http://localhost:$CorePort"
+$sttUrl     = "http://localhost:$SttPort"
+
+# 1. Core
+$corePid = Read-Pid -Root $toolRoot -Name 'core'
+if ($corePid -and (Test-ProcessAlive -Pid $corePid) -and (Test-PortListening -Port $CorePort)) {
+    Write-Host "[start-core] Core: skip (pid=$corePid)"
+} else {
+    Write-Host "[start-core] Core: go build..."
+    Push-Location $coreDir
+    try {
+        go build -o bin\core.exe ./cmd/server
+        if ($LASTEXITCODE -ne 0) { throw 'go build failed' }
+    } finally { Pop-Location }
+    Start-BackgroundProcess -Root $toolRoot -Name 'core' -FilePath $coreExe -WorkingDirectory $coreDir `
+        -Env @{ AGENTBRIDGE_ADDR = ":$CorePort" } -LogFile (Join-Path $toolRoot 'logs\core.log')
+    if (-not (Wait-Health -Url "$coreUrl/health" -TimeoutSec 30)) { throw "Core unhealthy on :$CorePort" }
+    Write-Host "[start-core] Core: running"
+}
+
+# 2. STT
+$sttPid = Read-Pid -Root $toolRoot -Name 'stt'
+if ($sttPid -and (Test-ProcessAlive -Pid $sttPid) -and (Test-PortListening -Port $SttPort)) {
+    Write-Host "[start-core] STT: skip (pid=$sttPid)"
+} else {
+    $sttScript = Join-Path $adapterDir 'stt\transcribe_server.py'
+    Start-BackgroundProcess -Root $toolRoot -Name 'stt' -FilePath $Python -ArgumentList @($sttScript) `
+        -WorkingDirectory $adapterDir -Env @{ AGENTBRIDGE_STT_PORT = "$SttPort" } `
+        -LogFile (Join-Path $toolRoot 'logs\stt.log')
+    if (-not (Wait-Health -Url "$sttUrl/health" -TimeoutSec 60)) { throw "STT unhealthy on :$SttPort" }
+    Write-Host "[start-core] STT: running"
+}
+
+# 3. watchdog
+$wdPid = Read-Pid -Root $toolRoot -Name 'watchdog'
+if ($wdPid -and (Test-ProcessAlive -Pid $wdPid)) {
+    Write-Host "[start-core] watchdog: skip (pid=$wdPid)"
+} elseif ($SkipWatchdog) {
+    Write-Host "[start-core] watchdog: skipped (-SkipWatchdog)"
+} else {
+    $wdScript = Join-Path $toolRoot 'scripts\tunnel-watchdog.ps1'
+    Start-BackgroundProcess -Root $toolRoot -Name 'watchdog' -FilePath 'powershell' `
+        -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$wdScript) `
+        -WorkingDirectory $toolRoot -LogFile (Join-Path $toolRoot 'logs\watchdog.log')
+    Write-Host "[start-core] watchdog: running"
+}
+
+Write-Host "[start-core] done: Core=$CorePort STT=$SttPort"
+```
+
+- [ ] **Step 2: 冒烟——冷启动**
+
+Run: `.\scripts\start-core.ps1`（确保当前无 Core/STT 在跑；若在跑先 `stop-core` 或手动停）
+Expected: 依次 Core go build → running、STT running、watchdog running；`netstat -ano | findstr :8088` 与 `:8790` LISTENING；工具根 `.run\` 出现 `core.pid` `stt.pid` `watchdog.pid`。
+
+- [ ] **Step 3: 冒烟——幂等**
+
+Run: 再次 `.\scripts\start-core.ps1`
+Expected: 三行全部 `skip`，无新进程、无端口冲突。
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/start-core.ps1
+git commit -m "feat(scripts): add start-core.ps1 global base startup"
+```
+
+---
+
+### Task 6: `stop-core.ps1`（冒烟）
+
+**Files:**
+- Create: `scripts/stop-core.ps1`
+
+**Interfaces:**
+- Consumes: `Resolve-ToolRoot`、`Read-Pid`、`Test-ProcessAlive`、`Remove-Pid`（Task 1–2）。
+
+- [ ] **Step 1: 写脚本**
+
+创建 `scripts/stop-core.ps1`：
+
+```powershell
+$ErrorActionPreference = "Continue"
+. "$PSScriptRoot\lib-agentbridge.ps1"
+$toolRoot = Resolve-ToolRoot
+
+$order = @('watchdog', 'stt', 'core')
+foreach ($name in $order) {
+    $pidValue = Read-Pid -Root $toolRoot -Name $name
+    if (-not $pidValue) { Write-Host "[stop-core] $name : no pid file"; continue }
+    if (Test-ProcessAlive -Pid $pidValue) {
+        Stop-Process -Id $pidValue -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 300
+        if (Test-ProcessAlive -Pid $pidValue) {
+            Write-Host "[stop-core] $name : WARN process $pidValue still alive (pid reuse?)"
+        } else {
+            Write-Host "[stop-core] $name : stopped (pid=$pidValue)"
+        }
+    } else {
+        Write-Host "[stop-core] $name : already gone (pid=$pidValue)"
+    }
+    Remove-Pid -Root $toolRoot -Name $name
+}
+Write-Host "[stop-core] done"
+```
+
+- [ ] **Step 2: 冒烟——全停**
+
+Run: `.\scripts\stop-core.ps1`（紧接 Task 5，三样在跑）
+Expected: watchdog → stt → core 依次 `stopped`；`netstat -ano | findstr :8088` 与 `:8790` 无 LISTENING；工具根 `.run\` 为空。
+
+- [ ] **Step 3: 冒烟——再启动**
+
+Run: `.\scripts\start-core.ps1` 然后 `.\scripts\stop-core.ps1`
+Expected: 起得来、停得掉，无残留 PID。
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/stop-core.ps1
+git commit -m "feat(scripts): add stop-core.ps1 global base shutdown"
+```
+
+---
+
+### Task 7: `start-session.ps1` 改默认 cwd + 复用 lib（验证切换不回退）
+
+**Files:**
+- Modify: `scripts/start-session.ps1`
+
+**Interfaces:**
+- Consumes: `Resolve-ToolRoot`、`Get-AgentBridgeEnv`（Task 1、3）。
+- Produces: `-Cwd` 默认 `(Get-Location).Path`；adapter 目录由 `Resolve-ToolRoot` 推导；前台 `node dist/session.js`；不写 PID。
+
+- [ ] **Step 1: 改脚本**
+
+将 `scripts/start-session.ps1` 整体替换为：
+
+```powershell
+param(
+  [string]$Cwd = (Get-Location).Path,
+  [string]$ResumeSession = "",
+  [string]$Url = "http://localhost:8088",
+  [string]$Session = "default",
+  [int]$AudioPort = 8788,
+  [string]$Python = "D:\environment\Python 3.13.7\python.exe"
+)
+
+$ErrorActionPreference = "Stop"
+. "$PSScriptRoot\lib-agentbridge.ps1"
+
+$sessionFile = Join-Path $Cwd ".agentbridge-current-session"
+if ($ResumeSession -eq "" -and (Test-Path $sessionFile)) {
+  $ResumeSession = (Get-Content $sessionFile -Raw).Trim()
+}
+
+$adapterDir = Join-Path (Resolve-ToolRoot) 'agent-adapter'
+
+$envMap = Get-AgentBridgeEnv -Cwd $Cwd -Url $Url -Session $Session -AudioPort $AudioPort -Python $Python -ResumeSession $ResumeSession
+foreach ($k in $envMap.Keys) { Set-Item "Env:\$k" $envMap[$k] }
+if ($ResumeSession -eq "") { Remove-Item Env:\AGENTBRIDGE_RESUME_SESSION -ErrorAction SilentlyContinue }
+
+$resumeLabel = "(latest in cwd)"
+if ($ResumeSession -ne "") { $resumeLabel = $ResumeSession }
+Write-Host "[session] cwd=$Cwd url=$Url session=$Session audioPort=$AudioPort python=$Python resume=$resumeLabel"
+
+Set-Location $adapterDir
+node dist/session.js
+```
+
+- [ ] **Step 2: 冒烟——切换项目不重起底座**
+
+Run:
+1. `.\scripts\start-core.ps1`（记下三个 PID）
+2. 建临时项目目录：`New-Item -ItemType Directory -Force $env:TEMP\abr-projB`
+3. `cd $env:TEMP\abr-projB` 后跑 `D:\project\5project\AgentBridge-master\scripts\start-session.ps1`
+Expected: 打印 `[session] cwd=...abr-projB ... resume=(latest in cwd)`，`node` 前台跑起；`netstat` 确认 Core/STT 的 PID 与第 1 步一致（底座未重启）；Ctrl+C 停 session。
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add scripts/start-session.ps1
+git commit -m "refactor(scripts): start-session default cwd + reuse lib"
+```
+
+---
+
+### Task 8: `start-all.ps1` 冷启动便捷包装（冒烟）
 
 **Files:**
 - Create: `scripts/start-all.ps1`
 
 **Interfaces:**
-- Consumes: 所有 lib 函数（Task 1–4）。
-- Produces: 顶层脚本，参数 `-Cwd`/`-Python`/`-CorePort`/`-SttPort`/`-Session`/`-AudioPort`/`-ResumeSession`/`-SkipWatchdog`（默认值见 spec）。
+- Consumes: `start-core.ps1`（Task 5）、`start-session.ps1`（Task 7）。
 
 - [ ] **Step 1: 写脚本**
 
@@ -405,210 +632,75 @@ git commit -m "feat(scripts): add Start-BackgroundProcess helper"
 
 ```powershell
 param(
-    [string]$Cwd = "D:\project\5project\AgentBridge-master",
+    [string]$Cwd = (Get-Location).Path,
+    [string]$ResumeSession = "",
+    [string]$Url = "http://localhost:8088",
+    [string]$Session = "default",
+    [int]$AudioPort = 8788,
     [string]$Python = "D:\environment\Python 3.13.7\python.exe",
     [int]$CorePort = 8088,
     [int]$SttPort = 8790,
-    [string]$Session = "default",
-    [int]$AudioPort = 8788,
-    [string]$ResumeSession = "",
     [switch]$SkipWatchdog
 )
 
 $ErrorActionPreference = "Stop"
-. "$PSScriptRoot\lib-agentbridge.ps1"
 
-$coreDir    = Join-Path $Cwd 'middleware-core'
-$adapterDir = Join-Path $Cwd 'agent-adapter'
-$coreExe    = Join-Path $coreDir 'bin\core.exe'
-$coreUrl    = "http://localhost:$CorePort"
-$sttUrl     = "http://localhost:$SttPort"
+$coreArgs = @('-CorePort', "$CorePort", '-SttPort', "$SttPort", '-Python', $Python)
+if ($SkipWatchdog) { $coreArgs += '-SkipWatchdog' }
+& "$PSScriptRoot\start-core.ps1" @coreArgs
 
-# 1. Core
-$corePid = Read-Pid -Root $Cwd -Name 'core'
-if ($corePid -and (Test-ProcessAlive -Pid $corePid) -and (Test-PortListening -Port $CorePort)) {
-    Write-Host "[start-all] Core: skip (pid=$corePid)"
-} else {
-    Write-Host "[start-all] Core: go build..."
-    Push-Location $coreDir
-    try {
-        go build -o bin\core.exe ./cmd/server
-        if ($LASTEXITCODE -ne 0) { throw 'go build failed' }
-    } finally { Pop-Location }
-    Start-BackgroundProcess -Root $Cwd -Name 'core' -FilePath $coreExe -WorkingDirectory $coreDir `
-        -Env @{ AGENTBRIDGE_ADDR = ":$CorePort" } -LogFile (Join-Path $Cwd 'logs\core.log')
-    if (-not (Wait-Health -Url "$coreUrl/health" -TimeoutSec 30)) { throw "Core unhealthy on :$CorePort" }
-    Write-Host "[start-all] Core: running"
-}
-
-# 2. STT
-$sttPid = Read-Pid -Root $Cwd -Name 'stt'
-if ($sttPid -and (Test-ProcessAlive -Pid $sttPid) -and (Test-PortListening -Port $SttPort)) {
-    Write-Host "[start-all] STT: skip (pid=$sttPid)"
-} else {
-    $sttScript = Join-Path $adapterDir 'stt\transcribe_server.py'
-    Start-BackgroundProcess -Root $Cwd -Name 'stt' -FilePath $Python -ArgumentList @($sttScript) `
-        -WorkingDirectory $adapterDir -Env @{ AGENTBRIDGE_STT_PORT = "$SttPort" } `
-        -LogFile (Join-Path $Cwd 'logs\stt.log')
-    if (-not (Wait-Health -Url "$sttUrl/health" -TimeoutSec 60)) { throw "STT unhealthy on :$SttPort" }
-    Write-Host "[start-all] STT: running"
-}
-
-# 3. watchdog
-$wdPid = Read-Pid -Root $Cwd -Name 'watchdog'
-if ($wdPid -and (Test-ProcessAlive -Pid $wdPid)) {
-    Write-Host "[start-all] watchdog: skip (pid=$wdPid)"
-} elseif ($SkipWatchdog) {
-    Write-Host "[start-all] watchdog: skipped (-SkipWatchdog)"
-} else {
-    $wdScript = Join-Path $Cwd 'scripts\tunnel-watchdog.ps1'
-    Start-BackgroundProcess -Root $Cwd -Name 'watchdog' -FilePath 'powershell' `
-        -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$wdScript) `
-        -WorkingDirectory $Cwd -LogFile (Join-Path $Cwd 'logs\watchdog.log')
-    Write-Host "[start-all] watchdog: running"
-}
-
-# 4. session.js (independent visible window)
-$sessPid = Read-Pid -Root $Cwd -Name 'session'
-if ($sessPid -and (Test-ProcessAlive -Pid $sessPid)) {
-    Write-Host "[start-all] session: skip (pid=$sessPid)"
-} else {
-    $envMap = Get-AgentBridgeEnv -Cwd $Cwd -Url $coreUrl -Session $Session -AudioPort $AudioPort -Python $Python -ResumeSession $ResumeSession
-    foreach ($k in $envMap.Keys) { Set-Item "Env:\$k" $envMap[$k] }
-    try {
-        $proc = Start-Process -FilePath 'node' -ArgumentList 'dist/session.js' -WorkingDirectory $adapterDir -PassThru
-    } finally {
-        foreach ($k in $envMap.Keys) { Remove-Item "Env:\$k" -ErrorAction SilentlyContinue }
-    }
-    Write-Pid -Root $Cwd -Name 'session' -Pid $proc.Id
-    Write-Host "[start-all] session: running (pid=$($proc.Id))"
-}
-
-Write-Host "[start-all] done: Core=$CorePort STT=$SttPort session=$Session"
+& "$PSScriptRoot\start-session.ps1" -Cwd $Cwd -ResumeSession $ResumeSession -Url $Url -Session $Session -AudioPort $AudioPort -Python $Python
 ```
 
-- [ ] **Step 2: 冒烟——冷启动**
+- [ ] **Step 2: 冒烟——冷启动全量**
 
-Run: `.\scripts\start-all.ps1`（在项目根，确保当前无 Core/STT/session 在跑）
-Expected: 依次打印 Core go build → running、STT running、watchdog running、session running；`netstat -ano | findstr :8088` 和 `:8790` 均 LISTENING；`ls .run\` 出现 `core.pid` `stt.pid` `watchdog.pid` `session.pid`。
-
-- [ ] **Step 3: 冒烟——幂等**
-
-Run: 再次 `.\scripts\start-all.ps1`
-Expected: 四行全部 `skip`，无新进程、无端口冲突。
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add scripts/start-all.ps1
-git commit -m "feat(scripts): add start-all.ps1 one-click startup"
-```
-
----
-
-### Task 6: `stop-all.ps1`（真机冒烟）
-
-**Files:**
-- Create: `scripts/stop-all.ps1`
-
-**Interfaces:**
-- Consumes: `Read-Pid`、`Test-ProcessAlive`、`Remove-Pid`（Task 1–2）。
-- Produces: 顶层脚本，参数 `-Cwd`（默认项目根）。
-
-- [ ] **Step 1: 写脚本**
-
-创建 `scripts/stop-all.ps1`：
-
-```powershell
-param([string]$Cwd = "D:\project\5project\AgentBridge-master")
-
-$ErrorActionPreference = "Continue"
-. "$PSScriptRoot\lib-agentbridge.ps1"
-
-$order = @('session', 'watchdog', 'stt', 'core')
-foreach ($name in $order) {
-    $pidValue = Read-Pid -Root $Cwd -Name $name
-    if (-not $pidValue) { Write-Host "[stop-all] $name : no pid file"; continue }
-    if (Test-ProcessAlive -Pid $pidValue) {
-        Stop-Process -Id $pidValue -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Milliseconds 300
-        if (Test-ProcessAlive -Pid $pidValue) {
-            Write-Host "[stop-all] $name : WARN process $pidValue still alive (pid reuse?)"
-        } else {
-            Write-Host "[stop-all] $name : stopped (pid=$pidValue)"
-        }
-    } else {
-        Write-Host "[stop-all] $name : already gone (pid=$pidValue)"
-    }
-    Remove-Pid -Root $Cwd -Name $name
-}
-Write-Host "[stop-all] done"
-```
-
-- [ ] **Step 2: 冒烟——全停**
-
-Run: `.\scripts\stop-all.ps1`（紧接 Task 5 之后，四样都在跑）
-Expected: session → watchdog → stt → core 依次 `stopped`；`netstat -ano | findstr :8088` 与 `:8790` 无 LISTENING；`ls .run\` 为空。
-
-- [ ] **Step 3: 冒烟——再启动**
-
-Run: `.\scripts\start-all.ps1` 然后 `.\scripts\stop-all.ps1`
-Expected: 起得来、停得掉，无残留 PID 文件。
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add scripts/stop-all.ps1
-git commit -m "feat(scripts): add stop-all.ps1 one-click shutdown"
-```
-
----
-
-### Task 7: `start-session.ps1` 复用 lib（验证不回退）
-
-**Files:**
-- Modify: `scripts/start-session.ps1`
-
-**Interfaces:**
-- Consumes: `Get-AgentBridgeEnv`（Task 3）。
-- Produces: 行为不变（读 `.agentbridge-current-session` 兜底 resume + 设环境变量 + 前台 `node dist/session.js`），仅环境变量组装改为复用 lib。
-
-- [ ] **Step 1: 重构环境变量组装**
-
-将 `scripts/start-session.ps1` 中手工 `$env:AGENTBRIDGE_* = ...` 的 6 行替换为：
-
-```powershell
-. "$PSScriptRoot\lib-agentbridge.ps1"
-$envMap = Get-AgentBridgeEnv -Cwd $Cwd -Url $Url -Session $Session -AudioPort $AudioPort -Python $Python -ResumeSession $ResumeSession
-foreach ($k in $envMap.Keys) { Set-Item "Env:\$k" $envMap[$k] }
-if ($ResumeSession -eq "") { Remove-Item Env:\AGENTBRIDGE_RESUME_SESSION -ErrorAction SilentlyContinue }
-```
-
-保留其余逻辑（读 `.agentbridge-current-session`、`Set-Location $adapterDir`、`node dist/session.js`）不动。
-
-- [ ] **Step 2: 冒烟——出门接力不回退**
-
-Run: 只保证 Core 在跑（`cd middleware-core && go run cmd/server/main.go`），不要用 `start-all.ps1`（它会同时起 session.js，与 start-session 冲突）；再在项目根跑 `.\scripts\start-session.ps1`。
-Expected: 打印 `[session] ... resume=<id>`，`node dist/session.js` 前台跑起，与重构前一致；Ctrl+C 能停掉。
+Run: 干净环境（`stop-core.ps1` 后）跑 `.\scripts\start-all.ps1`
+Expected: 先 start-core 三样 running，再 start-session 前台 `node` 跑起。
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add scripts/start-session.ps1
-git commit -m "refactor(scripts): start-session reuses Get-AgentBridgeEnv"
+git add scripts/start-all.ps1
+git commit -m "feat(scripts): add start-all.ps1 cold-start wrapper"
 ```
 
 ---
 
-### Task 8: `.gitignore` + 文档更新
+### Task 9: `resume-glasses.ps1` 改默认 cwd（冒烟）
+
+**Files:**
+- Modify: `scripts/resume-glasses.ps1`
+
+**Interfaces:**
+- Produces: `-Cwd` 默认 `(Get-Location).Path`，其余行为不变（读 `<Cwd>\.agentbridge-current-session` → `claude -r <id>`）。
+
+- [ ] **Step 1: 改默认值**
+
+将 `scripts/resume-glasses.ps1` 的 `param` 第一行 `[string]$Cwd = "D:\project\5project\AgentBridge-master"` 改为：
+
+```powershell
+[string]$Cwd = (Get-Location).Path
+```
+
+- [ ] **Step 2: 冒烟**
+
+Run: 在项目根 `.\scripts\resume-glasses.ps1`（当前目录有 `.agentbridge-current-session`）
+Expected: 打印 `[resume] session=<id>` 并 `claude -r` 续上，与改前一致。
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add scripts/resume-glasses.ps1
+git commit -m "refactor(scripts): resume-glasses default cwd to current dir"
+```
+
+---
+
+### Task 10: `.gitignore` + 文档更新
 
 **Files:**
 - Modify: `.gitignore`
 - Modify: `CLAUDE.md`
-
-**Interfaces:**
-- Consumes: 全部（Task 1–7）。
-- Produces: 忽略 `.run/`、`logs/`；CLAUDE.md「环境启动必查」改为指向一键脚本。
 
 - [ ] **Step 1: `.gitignore` 增加条目**
 
@@ -626,27 +718,29 @@ logs/
 
 ```markdown
 **环境启动必查（推荐一键）**：
-- 一键启动：`.\scripts\start-all.ps1`（拉起 Core + STT + watchdog + session.js）；`.\scripts\stop-all.ps1` 全部关闭。详见 `docs/superpowers/specs/2026-08-25-one-click-startup-design.md`。
+- 冷启动：`.\scripts\start-all.ps1`（Core + STT + watchdog + session.js）；切换项目：`cd 目标项目` 后 `.\scripts\start-session.ps1`；关底座：`.\scripts\stop-core.ps1`。详见 `docs/superpowers/specs/2026-08-25-one-click-startup-design.md`。
 - 手动清单（备查）：Core `AGENTBRIDGE_ADDR=":8088"` / Adapter `AGENTBRIDGE_SESSION=default` / 眼镜连接见「眼镜连接模式」/ 双设备 `4EU0221B11003871` + `1901092534002787` / watchdog `scripts\tunnel-watchdog.ps1`。
 ```
 
 - [ ] **Step 3: 冒烟——git status 干净**
 
-Run: `.\scripts\start-all.ps1` 后 `git status --short`
-Expected: 不出现 `.run/`、`logs/`、`middleware-core/bin/core.exe` 相关条目。
+Run: `.\scripts\start-core.ps1` 后 `git status --short`
+Expected: 不出现工具根 `.run/`、`logs/`、`middleware-core/bin/core.exe` 相关条目。
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add .gitignore CLAUDE.md
-git commit -m "docs: wire one-click startup into gitignore and CLAUDE.md"
+git commit -m "docs: wire layered startup into gitignore and CLAUDE.md"
 ```
 
 ---
 
 ## 最终自检
 
-- [ ] `Invoke-Pester -Path scripts/tests/ -Output Detailed` 全绿（16 用例）。
-- [ ] 冷启动 `start-all.ps1` → 四样 running；重复跑全 skip；`stop-all.ps1` → 全停、`.run/` 清空。
-- [ ] `start-session.ps1` 出门接力行为不回退。
-- [ ] `git status` 中 `.run/`、`logs/`、`core.exe` 均被忽略。
+- [ ] `Invoke-Pester -Path scripts/tests/ -Output Detailed` 全绿（17 用例）。
+- [ ] `start-core.ps1` 起三样 → 再跑全 skip → `stop-core.ps1` 全停、`.run/` 清空。
+- [ ] `start-all.ps1` 冷启动四样 running。
+- [ ] `cd 临时目录` 跑 `start-session.ps1` 只切会话，底座 PID 不变。
+- [ ] `start-session.ps1`/`resume-glasses.ps1` 默认当前目录行为不回退。
+- [ ] `git status` 中工具根 `.run/`、`logs/`、`core.exe` 均被忽略。

@@ -1,177 +1,157 @@
-# 一键启动/关闭（线 B 语音会话全量环境）设计 spec
+# 分层启动/切换（全局底座 + 项目会话）设计 spec
 
 ## 目标
 
-用一条命令拉起「线 B 语音会话」所需的完整 PC 端环境，一条命令全部关闭，消除每次手动准备 Core / STT / watchdog / session.js 四类常驻进程的重复劳动。
+把「线 B 语音会话」的 PC 端环境按生命周期分成两层——**全局底座**（Core/STT/watchdog，跟项目无关，起一次长期跑）和**项目会话**（session.js，随项目切换）。切换项目时只切会话层、不动底座，且会话层默认用「当前目录」定位项目，免去填路径/UUID。
 
 ## 背景与动机
 
 当前每次使用眼镜语音会话（出门/回家接力）前，需要在 PC 上手动准备四样东西：
 
-| 进程 | 作用 | 现状启动方式 |
+| 进程 | 作用 | 与项目的关系 |
 |------|------|-------------|
-| Core | WS 服务器（:8088），所有组件依赖 | `cd middleware-core && AGENTBRIDGE_ADDR=":8088" go run cmd/server/main.go` |
-| STT | 语音转文字（:8790），faster_whisper | `$Python agent-adapter/stt/transcribe_server.py` |
-| watchdog | ADB 隧道 + 眼镜 WiFi 保活（后台循环） | `Start-Process powershell -File scripts/tunnel-watchdog.ps1` |
-| session.js | 线 B 语音会话 daemon | `scripts/start-session.ps1`（内部 `node dist/session.js`） |
+| Core | WS 服务器（:8088），所有组件依赖 | 全局，无关 |
+| STT | 语音转文字（:8790），faster_whisper | 全局，无关 |
+| watchdog | ADB 隧道 + 眼镜 WiFi 保活（后台循环） | 全局，无关 |
+| session.js | 线 B 语音会话 daemon | **随项目**（resume 哪个 cwd 的会话） |
 
-其中 Core、STT、watchdog 是前台阻塞进程，session.js 也是。手动准备容易漏、顺序易错、关闭时后台进程难定位。
+核心洞察：前三个是 PC 全局服务，切项目不需要重起它们；只有 session.js 是 per-project。旧方案把它们绑成一个 `start-all.ps1` 且 `-Cwd` 写死，导致「换项目」得全量重启（STT 加载模型要几十秒，浪费）。
 
 ## 全局约束
 
-- **不改 Core 协议**：Core 的 WS 消息格式、`device_type`、事件分发逻辑不动。
-- **不改 AgentBridgeClient 消息协议**：眼镜端与 Core 之间的消息格式、降级链不动。
-- **审批链路不变**：approve/reject/超时降级的审批流不动。
-- **纯运维脚本层**：本功能只在 `scripts/` 下新增编排脚本，不触碰任何运行时组件源码。
-- **兼容 Windows PowerShell 5.1**：脚本需在 PS 5.1 下运行，禁止使用 `&&`、`||`、`??`、`?.`、三元等 5.1 不支持的语法。
+- **不改 Core 协议**、**不改 AgentBridgeClient 消息协议**、**审批链路不变**（纯运维脚本层）。
+- 脚本兼容 Windows PowerShell 5.1：禁用 `&&`、`||`、`??`、`?.`、三元表达式。
+- 日常使用命令必须零参数可用（冷启动 `.\scripts\start-all.ps1`；切换项目 `cd 目标项目` 后 `.\scripts\start-session.ps1`）。
+- **换项目不重起全局底座**：Core/STT/watchdog 与项目 cwd 无关。
+- **工具根与项目 cwd 分离**：脚本物理位置、Core 源码、`.run/`、`logs/` 都在「工具根」（AgentBridge 仓库）；仅 `.agentbridge-current-session` 属于「项目 cwd」。
+- **`-Cwd` 默认当前目录 `(Get-Location).Path`**，不再写死某个项目；工具根从 `$PSScriptRoot` 推导，不写死绝对路径。
+- PID 文件目录 `.run/`、日志目录 `logs/`、`middleware-core/bin/core.exe` 必须被 `.gitignore` 忽略。
 
 ## 架构总览
 
-新增一对编排脚本 + 一个共享库，用「PID 文件 + 端口健康检查」做幂等启动和精确关闭。
-
 ```
 scripts/
-  lib-agentbridge.ps1    # 共享库：环境变量、PID 读写、端口探测、健康检查、后台进程启动
-  start-all.ps1          # 一键启动编排（Core → STT → watchdog → session.js）
-  stop-all.ps1           # 一键关闭编排（session.js → watchdog → STT → Core）
-  start-session.ps1      # 保留原职责：只起 session daemon（出门接力用），改为复用 lib
-  resume-glasses.ps1     # 不动
-  tunnel-watchdog.ps1    # 不动（被 start-all 后台拉起）
+  lib-agentbridge.ps1    # 共享库：环境变量、PID 读写、端口探测、健康检查、后台进程启动、工具根定位
+  start-core.ps1         # 起全局底座：Core + STT + watchdog（无 cwd 概念）
+  stop-core.ps1          # 停全局底座：watchdog + STT + Core
+  start-session.ps1      # 起/切项目会话：session.js（-Cwd 默认当前目录）
+  start-all.ps1          # 冷启动便捷包装：start-core + start-session（薄封装）
+  resume-glasses.ps1     # PC 端 resume 眼镜刚用过的会话（-Cwd 默认当前目录）
+  tunnel-watchdog.ps1    # 不动（被 start-core 后台拉起）
 ```
 
-运行态目录（均加进 `.gitignore`）：
+运行态目录（工具根下，均加进 `.gitignore`）：
 
 ```
-.run/                    # 进程 PID 文件：core.pid / stt.pid / watchdog.pid / session.pid
-logs/                    # 后台进程日志：core.log / stt.log / watchdog.log
-middleware-core/bin/     # go build 产物 core.exe（*.exe 已被 .gitignore 覆盖）
+<工具根>/.run/           # 全局底座 PID 文件：core.pid / stt.pid / watchdog.pid
+<工具根>/logs/           # 后台进程日志：core.log / stt.log / watchdog.log
+<工具根>/middleware-core/bin/  # go build 产物 core.exe（*.exe 已被 .gitignore 覆盖）
 ```
 
 ## 组件详设
 
 ### `scripts/lib-agentbridge.ps1`（共享库）
 
-只放纯函数，供 `start-all.ps1`、`stop-all.ps1`、`start-session.ps1` 复用，避免环境变量组装和 PID 逻辑三处复制。全部函数可被 Pester 单测。
+只放纯函数，供各脚本复用。函数清单（完整签名在 plan 中给出）：
 
-函数清单（签名与职责）：
+- `Resolve-ToolRoot`（无参数，返回 `$PSScriptRoot` 上一级，即 AgentBridge 仓库根）。
+- `Write-Pid -Root <string> -Name <string> -Pid <int>` / `Read-Pid -Root <string> -Name <string>`（返回 `[int]` 或 `$null`）/ `Remove-Pid -Root <string> -Name <string>` —— PID 文件位于 `<Root>\.run\<Name>.pid`（调用方传 `Resolve-ToolRoot`）。
+- `Test-ProcessAlive -Pid <int>`（返回 `[bool]`）。
+- `Test-PortListening -Port <int>`（返回 `[bool]`，netstat 匹配 LISTENING）。
+- `Wait-Health -Url <string> -TimeoutSec <int> -IntervalSec <int>`（返回 `[bool]`）。
+- `Get-AgentBridgeEnv -Cwd -Url -Session -AudioPort -Python [-ResumeSession]`（返回 `[hashtable]`，`-ResumeSession` 非空才含 `AGENTBRIDGE_RESUME_SESSION`）。
+- `Start-BackgroundProcess -Root -Name -FilePath -ArgumentList -WorkingDirectory [-Env] [-LogFile]`（返回 `[Process]`，内部写 PID 到 `<Root>\.run`、建 `<Root>\logs`、日志重定向）。
 
-```powershell
-# 环境变量组装：返回哈希表，调用方自行 Set-Item
-function Get-AgentBridgeEnv {
-    param([string]$Cwd, [string]$Url, [string]$Session, [int]$AudioPort,
-          [string]$Python, [string]$ResumeSession)
-}
-# PID 文件读写
-function Write-Pid { param([string]$Name, [int]$Pid) }     # 写 .run/$Name.pid
-function Read-Pid  { param([string]$Name) }                # 读 .run/$Name.pid，无则返回 $null
-function Remove-Pid { param([string]$Name) }               # 删 .run/$Name.pid
-# 进程存活判断
-function Test-ProcessAlive { param([int]$Pid) }            # Get-Process -Id 不抛错且返回对象
-# 端口监听探测（用 netstat -ano 匹配 LISTENING 状态）
-function Test-PortListening { param([int]$Port) }
-# 健康检查轮询
-function Wait-Health {
-    param([string]$Url, [int]$TimeoutSec, [int]$IntervalSec)
-}                                                          # 轮询直到 200 或超时，返回 bool
-# 后台进程启动（Start-Process 封装 + 日志重定向 + PID 落盘）
-function Start-BackgroundProcess {
-    param([string]$Name, [string]$FilePath, [string[]]$ArgumentList,
-          [string]$WorkingDirectory, [string]$LogFile, [hashtable]$Env)
-}
-```
+路径约定：
 
-路径约定（写死在库里或作为库参数）：
-- 项目根 `$Cwd`（默认 `D:\project\5project\AgentBridge-master`，可参数覆盖）
-- adapter 目录 `$Cwd\agent-adapter`
-- core 目录 `$Cwd\middleware-core`
-- PID 目录 `$Cwd\.run`、日志目录 `$Cwd\logs`（启动前 `New-Item -Force` 确保存在）
-- Python 解释器默认 `D:\environment\Python 3.13.7\python.exe`
+- **工具根** = `Resolve-ToolRoot`；`adapter 目录 = 工具根\agent-adapter`、`core 目录 = 工具根\middleware-core`、`.run` 与 `logs` 都在工具根下。
+- **项目 cwd** `$Cwd` 由调用方传入，**默认 `(Get-Location).Path`**；仅用于 session.js 的 `AGENTBRIDGE_CWD` 与 `.agentbridge-current-session` 定位。
+- Python 解释器默认 `D:\environment\Python 3.13.7\python.exe`。
 
-### `scripts/start-all.ps1`（一键启动）
+### `scripts/start-core.ps1`（起全局底座）
 
-**参数**（全部带默认值，日常直接 `.\scripts\start-all.ps1` 即可）：
+**无 `-Cwd` 参数**（全局服务与项目无关，PID/日志都在工具根）。参数仅限端口/工具路径：
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `-Cwd` | `D:\project\5project\AgentBridge-master` | 项目根 |
-| `-Python` | `D:\environment\Python 3.13.7\python.exe` | STT 解释器 |
 | `-CorePort` | `8088` | Core 监听端口 |
 | `-SttPort` | `8790` | STT 监听端口 |
-| `-Session` | `default` | 与眼镜同 session |
-| `-AudioPort` | `8788` | 眼镜音频隧道端口 |
-| `-ResumeSession` | `""` | 显式钉住会话 id，空则读 `.agentbridge-current-session` |
+| `-Python` | `D:\environment\Python 3.13.7\python.exe` | STT 解释器 |
 | `-SkipWatchdog` | 开关 | 不连眼镜/无 adb 时跳过 watchdog |
 
-**启动顺序**（每步先做幂等检测，已运行则打印 `[skip]` 并继续）：
+顺序（每步幂等，已运行则 `[skip]`）：
 
-1. **Core**
-   - 幂等：`.run/core.pid` 存在且进程存活且 `:8088` 在监听 → skip。
-   - 否则：`go build -o bin/core.exe ./cmd/server`（在 `middleware-core` 下，**每次启动都 build**，靠 Go 编译缓存提速，不做自定义增量判断）。
-   - 以 `AGENTBRIDGE_ADDR=":<CorePort>"` 后台启动 `bin/core.exe`，日志 `logs/core.log`，写 PID。
-   - `Wait-Health "http://127.0.0.1:<CorePort>/health"` 超时 30s（首次 build 慢），失败报错并停在原地（不回滚）。
-2. **STT**
-   - 幂等：`.run/stt.pid` 存活且 `:<SttPort>` 监听 → skip。
-   - 以 `AGENTBRIDGE_STT_PORT="<SttPort>"`（`AGENTBRIDGE_STT_MODEL` 默认 `small`）后台启动 `$Python stt/transcribe_server.py`，日志 `logs/stt.log`，写 PID。
-   - `Wait-Health "http://127.0.0.1:<SttPort>/health"` 超时 60s（whisper 加载模型慢）。
-3. **watchdog**
-   - 幂等：`.run/watchdog.pid` 存活 → skip。
-   - 后台启动 `scripts/tunnel-watchdog.ps1`（PowerShell 后台），日志 `logs/watchdog.log`，写 PID。无 health，起完即成功。
-   - `-SkipWatchdog` 时整步跳过。
-4. **session.js**（独立窗口）
-   - 幂等：`.run/session.pid` 存活 → skip。
-   - `Start-Process node -ArgumentList "dist/session.js" -WorkingDirectory <adapterDir> -PassThru` 开**独立可见窗口**（日志直接显示，不重定向到文件），写 PID `.run/session.pid`。
-   - 设置环境变量：`AGENTBRIDGE_CWD`、`AGENTBRIDGE_URL`（默认 `http://localhost:<CorePort>`，与 `-CorePort` 联动）、`AGENTBRIDGE_SESSION`、`AGENTBRIDGE_AUDIO_PORT`、`AGENTBRIDGE_PYTHON`、`AGENTBRIDGE_RESUME_SESSION`（若有）。复用 `Get-AgentBridgeEnv`。
+1. **Core**：`go build -o bin/core.exe ./cmd/server`（在工具根 `middleware-core` 下，每次 build，靠 Go 缓存），`AGENTBRIDGE_ADDR=":<CorePort>"` 后台跑，`Wait-Health :<CorePort>/health`（超时 30s）。
+2. **STT**：`$Python stt/transcribe_server.py`，`AGENTBRIDGE_STT_PORT="<SttPort>"` 后台跑，`Wait-Health :<SttPort>/health`（超时 60s）。
+3. **watchdog**：后台跑 `tunnel-watchdog.ps1`，无 health；`-SkipWatchdog` 时跳过。
 
-**幂等判定统一规则**：PID 文件存在 **且** 进程存活（+ 有端口者再验端口）→ skip；否则视为未运行，清理残留 PID 后重新启动。
+三者均后台隐藏，日志落 `logs/`，PID 落 `.run/`（均在工具根）。
 
-**结束输出**：打印四行状态（`Core: running (pid=...)` / `STT: running` / `watchdog: running` / `session: running`），并提示「眼镜连上即可使用」。
+### `scripts/stop-core.ps1`（停全局底座）
 
-### `scripts/stop-all.ps1`（一键关闭）
+按 `watchdog → STT → Core` 逆序停（读工具根 `.run/*.pid` → `Test-ProcessAlive` → `Stop-Process` → `Remove-Pid`）。**无 `-Cwd` 参数**（读工具根 `.run`）。**不动 session.js**（session 由独立窗口 Ctrl+C 停）。
 
-按**依赖逆序**停（先停依赖者，最后停被依赖的 Core）：
+### `scripts/start-session.ps1`（起/切项目会话）
 
-1. session.js（读 `.run/session.pid`）
-2. watchdog（读 `.run/watchdog.pid`）
-3. STT（读 `.run/stt.pid`）
-4. Core（读 `.run/core.pid`）
+**参数**（`-Cwd` 默认当前目录，日常 `cd 目标项目` 后零参数跑）：
 
-每步：`Read-Pid` 得到 PID → `Test-ProcessAlive` 存活则 `Stop-Process -Id`（`-ErrorAction SilentlyContinue`），已死则打印 `[gone]` 跳过；停完 `Remove-Pid`。
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `-Cwd` | `(Get-Location).Path` | 要接入的项目目录 |
+| `-Url` | `http://localhost:8088` | Core 地址 |
+| `-Session` | `default` | 与眼镜同 session |
+| `-AudioPort` | `8788` | 眼镜音频隧道端口 |
+| `-Python` | `D:\environment\Python 3.13.7\python.exe` | STT 解释器 |
+| `-ResumeSession` | `""` | 显式钉住会话 id；空则读 `<Cwd>\.agentbridge-current-session`，再回退该项目 mtime 最新会话 |
 
-参数：`-Cwd`（默认项目根），用于定位 `.run/`。
+行为：读 `<Cwd>\.agentbridge-current-session` 兜底 resume → 用 `Get-AgentBridgeEnv` 组装环境变量 → `Set-Location` 到 adapter 目录（`Resolve-ToolRoot` 推导）→ **前台** `node dist/session.js`（占当前窗口，Ctrl+C 停）。**不写 PID**。
 
-**残留处理**：若某 PID 文件指向已死/已复用 PID，`Stop-Process` 失败时打印警告（提示可能是 PID 复用，建议手动 `netstat` 排查），不强行 `kill`。
+**切换项目流程**：停旧 session（Ctrl+C）→ `cd 目标项目` → `.\scripts\start-session.ps1`。底座不动。
+
+### `scripts/start-all.ps1`（冷启动便捷包装）
+
+薄封装：`& start-core.ps1` 然后 `& start-session.ps1`（参数透传，`-Cwd` 默认当前目录）。给「第一次冷启动」一条命令全起来用；之后切换项目直接用 `start-session.ps1`。
+
+### `scripts/resume-glasses.ps1`（PC 端回家接力）
+
+行为不变（读 `<Cwd>\.agentbridge-current-session` → `claude -r <id>`），仅 `-Cwd` 默认从写死改为 `(Get-Location).Path`。
+
+## 幂等语义
+
+统一规则：PID 文件存在 **且** 进程存活（+ 有端口者再验端口）→ `[skip]`；否则清理残留 PID 后重启。全局底座的 `.run/` 在工具根（固定、单实例）；会话的 `.agentbridge-current-session` 按 `-Cwd`（当前目录）定位，不同项目天然隔离。
 
 ## 错误处理
 
-- **启动失败**：某步 `Wait-Health` 超时或进程起不来 → 打印该进程的日志尾部若干行到控制台，`exit 1`，已启动的进程**不回滚**（留给用户观察或再跑一次走幂等 skip）。
-- **go build 失败**：Core 起不来 → 打印 build 错误，`exit 1`。
-- **停止时进程不存在**：静默跳过，不报错。
-- **PID 文件丢失但进程在跑**：start 的幂等检测退化到「端口监听」兜底（对 Core/STT）；session/watchdog 无端口，缺 PID 文件时提示用户手动处理。
+- 启动失败：某步 `Wait-Health` 超时或进程起不来 → 打印该进程日志尾部到控制台，`exit 1`，已启动进程不回滚。
+- `go build` 失败 → 打印错误，`exit 1`。
+- 停止时进程不存在 → 静默跳过；PID 复用导致 `Stop-Process` 失败 → 打印警告提示手动 `netstat` 排查。
 
 ## 与现有脚本的关系
 
-- `start-session.ps1` **保留**，职责收窄为「只起 session daemon」（出门接力：Core/STT/watchdog 已在跑，只需起 session）。其环境变量组装与 PID 逻辑改为调用 `lib-agentbridge.ps1`，删除内联重复代码。
-- `start-all.ps1` 是 `start-session.ps1` 的**超集**：先起 Core/STT/watchdog，再起 session.js。
-- `resume-glasses.ps1`、`tunnel-watchdog.ps1`、`deploy-apk.ps1`、`set-glasses-config.ps1` 不动。
+- `start-session.ps1` **保留**，`-Cwd` 默认值改当前目录，环境变量组装复用 `Get-AgentBridgeEnv`，adapter 路径改用 `Resolve-ToolRoot` 推导。
+- `resume-glasses.ps1` **保留**，`-Cwd` 默认值改当前目录。
+- `start-core.ps1` / `stop-core.ps1` / `start-all.ps1` **新增**。
+- `tunnel-watchdog.ps1`、`deploy-apk.ps1`、`set-glasses-config.ps1` 不动。
 
 ## 测试策略
 
-- **单测（Pester）**：针对 `lib-agentbridge.ps1` 的纯函数——`Write-Pid`/`Read-Pid`/`Remove-Pid`（读写删、目录不存在不抛错）、`Test-ProcessAlive`（存活/已死/非法 PID）、`Test-PortListening`（监听/未监听）、`Wait-Health`（立即 200 / 超时返回 false）、`Get-AgentBridgeEnv`（各参数组合下环境变量拼装正确、含/不含 `-ResumeSession`）。
-- **编排冒烟（真机/本机）**：`start-all.ps1` 起一遍 → 四样全 running → 再跑一次确认四样全 `[skip]` → `stop-all.ps1` → 四样全停 → 再 `start-all.ps1` 能重新拉起。`-SkipWatchdog` 下 watchdog 不被拉起。
+- **单测（Pester）**：`lib-agentbridge.ps1` 纯函数——`Resolve-ToolRoot`（返回仓库根、路径存在）、`Write-Pid`/`Read-Pid`/`Remove-Pid`（读写删、目录不存在不抛错、畸形内容返回 `$null`）、`Test-ProcessAlive`（存活/已死/非法 PID）、`Test-PortListening`（监听/未监听）、`Wait-Health`（立即 200 / 超时 false）、`Get-AgentBridgeEnv`（含/不含 `-ResumeSession`）、`Start-BackgroundProcess`（起进程写 PID、进程存活）。
+- **编排冒烟（真机/本机）**：`start-core.ps1` 起三样 → 再跑全 `[skip]` → `stop-core.ps1` 全停；`start-all.ps1` 冷启动四样 running；`cd` 到临时目录跑 `start-session.ps1` 能切会话且底座 PID 不变。
 - 不引入 Go/TS 测试（本功能不碰运行时源码）。
 
 ## 验收标准
 
-1. 干净环境下 `.\scripts\start-all.ps1` 一条命令拉起 Core + STT + watchdog + session.js，四样均 running。
-2. 重复执行 `start-all.ps1` 四样全部 `[skip]`，不产生端口冲突或重复进程。
-3. `.\scripts\stop-all.ps1` 一条命令停掉四样（含后台隐藏进程），`.run/` 清理干净。
-4. `.\scripts\start-session.ps1`（出门接力）仍能独立工作，行为不回退。
-5. Pester 单测全绿；`git status` 中 `.run/`、`logs/`、`middleware-core/bin/core.exe` 均被忽略。
+1. `.\scripts\start-all.ps1`（冷启动）一条命令拉起 Core + STT + watchdog + session.js。
+2. `.\scripts\start-core.ps1` 重复执行三样全 `[skip]`；`.\scripts\stop-core.ps1` 停掉三样且工具根 `.run/` 清空。
+3. `cd 项目B` 后 `.\scripts\start-session.ps1` 只切会话，Core/STT/watchdog 的 PID 不变。
+4. `.\scripts\start-session.ps1 -ResumeSession <id>` 能钉住指定会话。
+5. Pester 单测全绿；`git status` 中工具根 `.run/`、`logs/`、`core.exe` 均被忽略。
 
 ## 非目标（YAGNI）
 
-- 不做 Core/STT 的 Windows 服务化、开机自启、守护重启（超出「一键启动」诉求）。
-- 不做线 A（relay）的一键编排（用户默认链路是线 B；线 A 后续有需要再扩展，`lib` 已预留复用空间）。
-- 不做 docker 容器化（USB/adb/模型文件穿透成本高，开发期不划算）。
-- 不做自定义的「源码变了才 build」增量判断（Go 编译缓存已足够，见背景说明）。
+- 不做 Core/STT 的 Windows 服务化、开机自启、守护重启。
+- 不做线 A（relay）的编排（用户默认链路线 B；lib 已预留复用空间）。
+- 不做 docker 容器化。
+- 不做自定义「源码变了才 build」增量判断（Go 编译缓存已足够）。
 - 不做多平台（仅 Windows PowerShell 5.1）。
+- 不做「会话列表 + 免 UUID 切换」的交互选择器（会话本身以 UUID 标识，切换指定会话仍需 `-ResumeSession <id>`；本项目聚焦「换项目免路径」）。
