@@ -4,7 +4,7 @@
 > **MVP 目标**：4-6 周
 > **首个硬件终端**：Rokid RG-glasses（AR 眼镜），CXR-L/CXR-S SDK
 > **参考对比**：GPT 提供的架构骨架（6 层模型）→ 融合优化为当前方案
-> **当前文档状态**：2026-07-27 已按仓库实现同步。Phase 2 已于 2026-08-11 完成（12 场景全部通过），Phase 3a spec+plan 已交付。**当前权威入口为 CLAUDE.md**，本架构文档保留为设计参考，进度信息可能滞后。
+> **当前文档状态**：2026-07-27 已按仓库实现同步。Phase 2 已于 2026-08-11 完成（12 场景全部通过），Phase 3a 真机 E2E 通过（2026-08-14），mDNS 服务发现已实现（2026-08-19）。**当前权威入口为 CLAUDE.md**，本架构文档保留为设计参考，进度信息可能滞后。
 
 ---
 
@@ -469,7 +469,7 @@ Phone ← CXR-L SDK → Glass（仅生命周期：appUploadAndInstall + appStart
 |------|------|------|
 | **Phase 1** (PC only) | Core + Agent Adapter + Dashboard + Mock Device + SQLite/W3 协议 | ✅ 已完成 (2026-07-26) |
 | **Phase 2** (WiFi 联调) | 眼镜端 WebSocket 客户端 + 卡片渲染 + TTS + 按键审批 + 真机验收 | ✅ 已完成 (2026-08-11) — 12 场景全部通过 |
-| **Phase 3a** (Agent 适配) | Claude Code CLI Adapter V2 — 真实 Agent 审批闭环 | 📋 Spec + Plan 已完成，待开发 |
+| **Phase 3a** (Agent 适配) | Claude Code CLI Adapter V2 — 真实 Agent 审批闭环 | ✅ 已完成 (2026-08-14) — 真机 E2E 四场景通过 |
 | **Phase 3b/c** (多 Agent / 开源化) | Codex, GenericTerminalAdapter, SDK, 协议文档 | 🔜 规划中 |
 
 ---
@@ -552,6 +552,6 @@ agentbridge/
 | EventStore 可靠性 | 已实现 | 内存 ring buffer + 可选 SQLite，支持 `seq`、`last_acked_seq`、replay |
 | Agent provider | 已实现 | `claude-api`、`openai-compatible`、`generic-cli`、`claude-cli` |
 | Mock Device / W3 readiness | 已实现 | 状态层、e2e replay/action、W3 readiness 和 preflight |
-| 眼镜端客户端 (cxrswithcxrl) | 开发中 | `rokid-sdk/cxrssample/cxrswithcxrl/app/src/main/java/com/rokid/cxrswithcxrl/agent/` 已包含 AgentBridgeProtocol + AgentBridgeClient + CardRenderer + AgentActionHandler；默认连接 `ws://192.168.1.100:8080/ws/default?device_type=ar_glasses`，现场需改为 Core 局域网 IP |
+| 眼镜端客户端 (cxrswithcxrl) | ✅ 已完成 | `rokid-sdk/cxrssample/cxrswithcxrl/app/src/main/java/com/rokid/cxrswithcxrl/agent/` 含 AgentBridgeProtocol + AgentBridgeClient + CardRenderer + AgentActionHandler；mDNS 自动发现 Core（NsdManager），降级链 mDNS → 手动 IP → ADB 隧道，默认 `ws://127.0.0.1:19090` |
 | 手机端客户端 (CXRLSample) | 最小化 | CXR 生命周期已可用；Core 地址配置预留，详见 Phase 2 计划 |
 | 生产化安全/存储 | 待实现 | API key/JWT、设备授权、PostgreSQL/Redis、审批审计持久化 |

@@ -34,7 +34,7 @@ cd mock-device && npm install && npm run phone
 - `docs/` — 架构设计、需求、W3 联调清单和历史设计/计划文档
 - 当前目录是 Git 仓库；改动前后用 `git status --short --branch` 确认工作区状态
 
-## 当前状态 (2026-08-11)
+## 当前状态 (2026-08-26)
 
 ### Phase 1（PC only）— ✅ 全部完成
 
@@ -143,13 +143,20 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - `start-session.ps1` 结尾会 `Set-Location` 到 `agent-adapter` 再跑 daemon，Ctrl+C 停掉后提示符**留在 `agent-adapter`**。切回 PC 先 `cd ..` 回项目根再 `resume-glasses.ps1`。
 - Core 是常驻服务，跟「在哪个终端窗口启动」无关；另开窗口跑脚本不会让 Core 消失，判断标准是进程还在不在（`netstat -ano | findstr :8088`）。
 
-**Phase 2 刻意推迟到 Phase 3 的项目**：
-- TTS 真机验证（代码已写，音频引擎初始化失败，需排查 Rokid 音频路由）
+**生产加固 bug 修复（2026-08-26，已提交，均无需真机，`go test ./...` 全绿）**：
+- Bug B：relay 订阅 wsClient `error` 事件，Core 重启不崩溃（`agent-adapter/src/relay.ts`）
+- #88：Core hub 同名设备重复注册安全覆盖，`Unregister` 改 channel 感知（`internal/ws/hub.go` + 测试）
+- Bug A：Core mDNS 随 IP 漂移周期重注册（`internal/mdns/broadcaster.go` + 测试）
+- #29：middleware-core 测试补全——dispatcher 6 事件类型 + approval manager 并发安全（`go test ./...` 全绿）
+- #89：眼镜端重连去重 `ReconnectGuard`（onFailure+onClosed 双重连去重，`agent/ReconnectGuard.kt`）
+- 条件 WakeLock：仅关键卡片（actionable/executing/rejected/alert）常亮，闲态允许熄屏（`CardStateMachine.shouldKeepScreenOn` + `MainActivity` collect `agentCard`）
+
+**仍待办（推迟到后续）**：
+- TTS 真机验证（代码已写，音频引擎初始化失败，需排查 Rokid 音频路由）— 硬阻塞语音审批
 - 语音审批（依赖 TTS 可用）
 - 手机端 AgentBridgeService（作为网络中枢 fallback）
-- middleware-core 测试（Go 表驱动测试 for dispatcher + approval manager）
 - 主动 ack 补全（当前 seq 去重已覆盖核心场景）
-- 认证/安全层
+- 认证/安全层（WebSocket 当前未鉴权）
 
 **环境启动必查（推荐一键）**：
 - 冷启动：`.\scripts\start-all.ps1`（Core + STT + watchdog + session.js）；切换项目：`cd 目标项目` 后 `.\scripts\start-session.ps1`；关底座：`.\scripts\stop-core.ps1`。详见 `docs/superpowers/specs/2026-08-25-one-click-startup-design.md`。
