@@ -176,6 +176,9 @@ export async function main(): Promise<void> {
   });
 
   wsClient.on('user_action', (action) => relay.handleUserAction(action as UserActionPayload));
+  wsClient.on('error', (err) => {
+    console.error('[relay] ws error:', err instanceof Error ? err.message : err);
+  });
   wsClient.connect();
 
   const server = createServer((req, res) => {
