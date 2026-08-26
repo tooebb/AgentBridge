@@ -113,4 +113,35 @@ class CardStateMachineTest {
         assertTrue(toggled.detailsVisible)
         assertFalse(CardStateMachine.onViewDetails(toggled).detailsVisible)
     }
+
+    @Test
+    fun shouldKeepScreenOn_trueForActionable() {
+        val state = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
+
+        assertTrue(CardStateMachine.shouldKeepScreenOn(state))
+    }
+
+    @Test
+    fun shouldKeepScreenOn_trueForExecuting() {
+        val approval = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
+
+        assertTrue(CardStateMachine.shouldKeepScreenOn(CardStateMachine.onDecision(approval, "approve")))
+    }
+
+    @Test
+    fun shouldKeepScreenOn_trueForRejected() {
+        val approval = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
+
+        assertTrue(CardStateMachine.shouldKeepScreenOn(CardStateMachine.onDecision(approval, "reject")))
+    }
+
+    @Test
+    fun shouldKeepScreenOn_trueForAlert() {
+        assertTrue(CardStateMachine.shouldKeepScreenOn(AgentCardState(renderHint = "alert_card")))
+    }
+
+    @Test
+    fun shouldKeepScreenOn_falseForStatus() {
+        assertFalse(CardStateMachine.shouldKeepScreenOn(AgentCardState()))
+    }
 }

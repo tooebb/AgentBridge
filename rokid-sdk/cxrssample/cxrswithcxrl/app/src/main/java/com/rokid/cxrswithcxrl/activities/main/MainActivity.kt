@@ -8,6 +8,7 @@ import android.os.PowerManager
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -16,14 +17,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModelProvider
 import com.rokid.cxrswithcxrl.agent.AgentBridgeScreen
 import com.rokid.cxrswithcxrl.agent.AgentCardState
+import com.rokid.cxrswithcxrl.agent.CardStateMachine
 import com.rokid.cxrswithcxrl.agent.GestureHandler
 import com.rokid.cxrswithcxrl.agent.MicProbe
 import com.rokid.cxrswithcxrl.receiver.KeyReceiver
 import com.rokid.cxrswithcxrl.receiver.KeyType
 import com.rokid.cxrswithcxrl.ui.theme.CXRSWithCXRLTheme
+import kotlinx.coroutines.launch
 
 /**
  * CustomApp entry Activity on glasses.
@@ -47,17 +51,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.decorView.keepScreenOn = true
         enableEdgeToEdge()
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
             "cxrswithcxrl:agentbridge"
         )
-        wakeLock.acquire()
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
         viewModel.startAgentBridge(applicationContext)
+        lifecycleScope.launch {
+            viewModel.agentCard.collect { state ->
+                setKeepScreenOn(CardStateMachine.shouldKeepScreenOn(state))
+            }
+        }
         setContent {
             CXRSWithCXRLTheme {
                 MainScreen(
@@ -76,6 +82,22 @@ class MainActivity : ComponentActivity() {
             }
         })
         startMicProbe()
+    }
+
+    private fun setKeepScreenOn(keep: Boolean) {
+        if (keep) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.decorView.keepScreenOn = true
+            if (!wakeLock.isHeld) {
+                wakeLock.acquire()
+            }
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.decorView.keepScreenOn = false
+            if (wakeLock.isHeld) {
+                wakeLock.release()
+            }
+        }
     }
 
     private fun startMicProbe() {
