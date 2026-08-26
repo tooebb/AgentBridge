@@ -49,6 +49,7 @@ class AgentBridgeClient(
     private var closedByUser = false
     private var reconnectDelayMs = 2_000L
     private val reconnectTracker = ReconnectTracker()
+    private val reconnectGuard = ReconnectGuard()
     private val actionDeduper = ActionDeduper()
     private val seenSeqs = linkedSetOf<Long>()
     private val seenMessageIds = linkedSetOf<String>()
@@ -73,6 +74,7 @@ class AgentBridgeClient(
 
     fun disconnect() {
         closedByUser = true
+        reconnectGuard.clear()
         mainHandler.removeCallbacksAndMessages(null)
         webSocket?.close(1000, "activity stopped")
         webSocket = null
@@ -111,6 +113,7 @@ class AgentBridgeClient(
 
     private val socketListener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            reconnectGuard.clear()
             reconnectDelayMs = 2_000L
             reconnectTracker.markConnected()
             listener.onConnectionChanged("WS: connected")
@@ -171,15 +174,22 @@ class AgentBridgeClient(
         if (closedByUser) {
             return
         }
+        if (!reconnectGuard.trySchedule()) {
+            return
+        }
         val now = System.currentTimeMillis()
         reconnectTracker.recordFailure(now)
         if (reconnectTracker.isStale(now)) {
+            reconnectGuard.clear()
             mainHandler.post { listener.onStale() }
             return
         }
         val delay = reconnectDelayMs
         listener.onConnectionChanged("WS: retry in ${delay / 1000}s")
-        mainHandler.postDelayed({ connect() }, delay)
+        mainHandler.postDelayed({
+            reconnectGuard.clear()
+            connect()
+        }, delay)
         reconnectDelayMs = (reconnectDelayMs * 2).coerceAtMost(30_000L)
     }
 
