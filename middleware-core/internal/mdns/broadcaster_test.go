@@ -24,13 +24,13 @@ func TestParsePort(t *testing.T) {
 }
 
 func TestIPv4SetEqual(t *testing.T) {
-	if !ipv4Set{"10.0.0.2", "192.168.1.5"}.equal(ipv4Set{"10.0.0.2", "192.168.1.5"}) {
+	if !(ipv4Set{"10.0.0.2", "192.168.1.5"}).equal(ipv4Set{"10.0.0.2", "192.168.1.5"}) {
 		t.Fatal("expected identical sets to be equal")
 	}
-	if ipv4Set{"10.0.0.2"}.equal(ipv4Set{"10.0.0.3"}) {
+	if (ipv4Set{"10.0.0.2"}).equal(ipv4Set{"10.0.0.3"}) {
 		t.Fatal("expected changed address to be unequal")
 	}
-	if ipv4Set{"10.0.0.2"}.equal(ipv4Set{"10.0.0.2", "192.168.1.5"}) {
+	if (ipv4Set{"10.0.0.2"}).equal(ipv4Set{"10.0.0.2", "192.168.1.5"}) {
 		t.Fatal("expected changed set length to be unequal")
 	}
 }

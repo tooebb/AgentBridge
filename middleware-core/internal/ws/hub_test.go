@@ -9,12 +9,12 @@ import (
 
 func TestRegisterReplacingDeviceClosesOldChannel(t *testing.T) {
 	hub := NewHub()
-	oldCh, err := hub.Register("session-1", "", domain.DeviceGlasses)
+	oldCh, err := hub.Register("session-1", "", domain.DeviceGlass)
 	if err != nil {
 		t.Fatalf("Register old: %v", err)
 	}
 
-	newCh, err := hub.Register("session-1", "", domain.DeviceGlasses)
+	newCh, err := hub.Register("session-1", "", domain.DeviceGlass)
 	if err != nil {
 		t.Fatalf("Register new: %v", err)
 	}
@@ -34,20 +34,19 @@ func TestRegisterReplacingDeviceClosesOldChannel(t *testing.T) {
 
 func TestUnregisterOldChannelDoesNotRemoveReplacement(t *testing.T) {
 	hub := NewHub()
-	oldCh, err := hub.Register("session-1", "", domain.DeviceGlasses)
+	oldCh, err := hub.Register("session-1", "", domain.DeviceGlass)
 	if err != nil {
 		t.Fatalf("Register old: %v", err)
 	}
-	newCh, err := hub.Register("session-1", "", domain.DeviceGlasses)
+	newCh, err := hub.Register("session-1", "", domain.DeviceGlass)
 	if err != nil {
 		t.Fatalf("Register new: %v", err)
 	}
 
-	hub.Unregister("session-1", domain.DeviceGlasses, oldCh)
-	err = hub.SendToDevice("session-1", domain.DeviceGlasses, &domain.DeviceMessage{
-		ID:        "msg-1",
+	hub.Unregister("session-1", domain.DeviceGlass, oldCh)
+	err = hub.SendToDevice("session-1", domain.DeviceGlass, &domain.DeviceMessage{
+		MessageID: "msg-1",
 		SessionID: "session-1",
-		EventType: "task_running",
 	})
 	if err != nil {
 		t.Fatalf("SendToDevice after stale unregister: %v", err)
@@ -62,20 +61,19 @@ func TestUnregisterOldChannelDoesNotRemoveReplacement(t *testing.T) {
 
 func TestUnregisterOnlyAffectsMatchingSession(t *testing.T) {
 	hub := NewHub()
-	ch1, err := hub.Register("session-1", "", domain.DeviceGlasses)
+	ch1, err := hub.Register("session-1", "", domain.DeviceGlass)
 	if err != nil {
 		t.Fatalf("Register session-1: %v", err)
 	}
-	ch2, err := hub.Register("session-2", "", domain.DeviceGlasses)
+	ch2, err := hub.Register("session-2", "", domain.DeviceGlass)
 	if err != nil {
 		t.Fatalf("Register session-2: %v", err)
 	}
 
-	hub.Unregister("session-1", domain.DeviceGlasses, ch1)
-	if err := hub.SendToDevice("session-2", domain.DeviceGlasses, &domain.DeviceMessage{
-		ID:        "msg-2",
+	hub.Unregister("session-1", domain.DeviceGlass, ch1)
+	if err := hub.SendToDevice("session-2", domain.DeviceGlass, &domain.DeviceMessage{
+		MessageID: "msg-2",
 		SessionID: "session-2",
-		EventType: "task_running",
 	}); err != nil {
 		t.Fatalf("SendToDevice session-2: %v", err)
 	}
