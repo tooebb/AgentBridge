@@ -160,6 +160,7 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 
 **环境启动必查（推荐一键）**：
 - 冷启动：`.\scripts\start-all.ps1`（Core + STT + watchdog + session.js）；切换项目：`cd 目标项目` 后 `.\scripts\start-session.ps1`；关底座：`.\scripts\stop-core.ps1`。详见 `docs/superpowers/specs/2026-08-25-one-click-startup-design.md`。
+- 日常完整流程（冷启动 + 出门/回家双向接力 + 语音/手势速查）：`docs/usage.md`。
 - 手动清单（备查）：Core `AGENTBRIDGE_ADDR=":8088"` / Adapter `AGENTBRIDGE_SESSION=default` / 眼镜连接见「眼镜连接模式」/ 双设备 `4EU0221B11003871` + `1901092534002787` / watchdog `scripts\tunnel-watchdog.ps1`。
 
 ### CXR-L SDK 联调
