@@ -144,4 +144,40 @@ class CardStateMachineTest {
     fun shouldKeepScreenOn_falseForStatus() {
         assertFalse(CardStateMachine.shouldKeepScreenOn(AgentCardState()))
     }
+
+    @Test
+    fun shouldRouteToApproval_trueForActionable() {
+        val state = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
+        assertTrue(CardStateMachine.shouldRouteToApproval(state))
+    }
+
+    @Test
+    fun shouldRouteToApproval_falseForIdle() {
+        assertFalse(CardStateMachine.shouldRouteToApproval(AgentCardState()))
+    }
+
+    @Test
+    fun shouldRouteToApproval_falseForCompleted() {
+        val approval = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
+        val completed = CardStateMachine.reduce(
+            approval,
+            statusMessage(4, "task_completed", "✓ Task completed", "done"),
+            false
+        ).state
+        // 关键：完成卡片 taskId 非空，但 renderHint 已回到 status_card
+        assertEquals("status_card", completed.renderHint)
+        assertFalse(CardStateMachine.shouldRouteToApproval(completed))
+    }
+
+    @Test
+    fun shouldRouteToApproval_falseForExecuting() {
+        val approval = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
+        assertFalse(CardStateMachine.shouldRouteToApproval(CardStateMachine.onDecision(approval, "approve")))
+    }
+
+    @Test
+    fun shouldRouteToApproval_falseForRejected() {
+        val approval = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
+        assertFalse(CardStateMachine.shouldRouteToApproval(CardStateMachine.onDecision(approval, "reject")))
+    }
 }

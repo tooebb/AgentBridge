@@ -18,6 +18,7 @@ import com.rokid.cxr.Caps
 import com.rokid.cxrswithcxrl.agent.AgentActionHandler
 import com.rokid.cxrswithcxrl.agent.AgentBridgeClient
 import com.rokid.cxrswithcxrl.agent.AgentCardState
+import com.rokid.cxrswithcxrl.agent.CardStateMachine
 import com.rokid.cxrswithcxrl.agent.ConnectionConfig
 import com.rokid.cxrswithcxrl.agent.ConnectionResolver
 import com.rokid.cxrswithcxrl.agent.ConnectionTarget
@@ -394,12 +395,11 @@ class MainViewModel: ViewModel() {
             _capsFromClient.value = "INPUT: handler null"
             return
         }
-        val taskId = agentCard.value.taskId
-        if (taskId.isBlank()) {
+        val card = agentCard.value
+        if (!CardStateMachine.shouldRouteToApproval(card)) {
+            // 没有待审批卡片：单击 = 开始/停止录音，其余手势无操作
             if (actionType == "approve") {
                 toggleVoice()
-            } else {
-                _capsFromClient.value = "INPUT: no task taskId='$taskId'"
             }
             return
         }
@@ -408,8 +408,8 @@ class MainViewModel: ViewModel() {
             _capsFromClient.value = "INPUT: agentClient null"
             return
         }
-        val sent = client.sendAction(taskId, actionType)
-        _capsFromClient.value = "INPUT: sendAction=$sent taskId=$taskId action=$actionType"
+        val sent = client.sendAction(card.taskId, actionType)
+        _capsFromClient.value = "INPUT: sendAction=$sent taskId=${card.taskId} action=$actionType"
         _agentCard.value = handler.onGestureResult(actionType, sent)
     }
 

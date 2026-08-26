@@ -114,6 +114,9 @@ object CardStateMachine {
     fun shouldKeepScreenOn(state: AgentCardState): Boolean =
         state.renderHint in keepScreenOnRenderHints
 
+    fun shouldRouteToApproval(state: AgentCardState): Boolean =
+        state.renderHint == "actionable_card"
+
     fun renderHintFor(eventType: String?, severity: String?): String = when {
         eventType == "needs_approval" -> "actionable_card"
         severity == "critical" -> "alert_card"
