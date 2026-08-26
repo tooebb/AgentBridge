@@ -12,10 +12,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$coreArgs = @('-CorePort', "$CorePort", '-SttPort', "$SttPort", '-Python', $Python)
+$coreParams = @{
+    CorePort = $CorePort
+    SttPort  = $SttPort
+    Python   = $Python
+}
 if ($SkipWatchdog) {
-    $coreArgs += '-SkipWatchdog'
+    $coreParams['SkipWatchdog'] = $true
 }
 
-& "$PSScriptRoot\start-core.ps1" @coreArgs
+& "$PSScriptRoot\start-core.ps1" @coreParams
 & "$PSScriptRoot\start-session.ps1" -Cwd $Cwd -ResumeSession $ResumeSession -Url $Url -Session $Session -AudioPort $AudioPort -Python $Python
