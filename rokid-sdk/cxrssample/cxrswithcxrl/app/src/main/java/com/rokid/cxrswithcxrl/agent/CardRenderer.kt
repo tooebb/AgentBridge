@@ -30,6 +30,15 @@ fun AgentBridgeScreen(
     voiceStatus: String = "",
     showDebug: Boolean = false
 ) {
+    if (card.screenOff) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            color = Color.Black
+        ) {}
+        return
+    }
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -167,7 +176,7 @@ private fun actionHint(card: AgentCardState): String {
         else -> {
             val click = card.quickActions.getOrNull(0) ?: "continue"
             val doubleClick = card.quickActions.getOrNull(1) ?: "pause"
-            "CLICK: $click    DOUBLE: $doubleClick    SWIPE: view_details"
+            "CLICK: $click    DOUBLE: $doubleClick    SWIPE: 全文/熄屏"
         }
     }
 }
