@@ -5,12 +5,6 @@ object CardStateMachine {
     data class Reduction(val state: AgentCardState, val ttsText: String)
 
     private val cardPreservedEvents = setOf("task_started", "task_running", "heartbeat")
-    private val keepScreenOnRenderHints = setOf(
-        "actionable_card",
-        "executing_card",
-        "rejected_card",
-        "alert_card"
-    )
 
     fun reduce(current: AgentCardState, message: DeviceMessage, duplicate: Boolean): Reduction {
         if (duplicate) {
@@ -70,6 +64,7 @@ object CardStateMachine {
             lastAckedSeq = message.seq.coerceAtLeast(current.lastAckedSeq),
             isReplay = message.isReplay,
             duplicateCount = current.duplicateCount,
+            screenOff = if (event?.eventType == "heartbeat") current.screenOff else false,
             statusLine = "seq=${message.seq}, replay=${message.isReplay}, event=${event?.eventType ?: "unknown"}"
         )
 
@@ -111,8 +106,10 @@ object CardStateMachine {
     fun resetToIdle(current: AgentCardState): AgentCardState =
         AgentCardState(connectionLabel = current.connectionLabel)
 
-    fun shouldKeepScreenOn(state: AgentCardState): Boolean =
-        state.renderHint in keepScreenOnRenderHints
+    fun shouldKeepScreenOn(state: AgentCardState): Boolean = !state.screenOff
+
+    fun setScreenOff(current: AgentCardState, off: Boolean): AgentCardState =
+        current.copy(screenOff = off)
 
     fun shouldRouteToApproval(state: AgentCardState): Boolean =
         state.renderHint == "actionable_card"

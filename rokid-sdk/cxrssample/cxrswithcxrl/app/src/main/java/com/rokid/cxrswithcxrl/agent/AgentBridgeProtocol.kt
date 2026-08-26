@@ -76,5 +76,6 @@ data class AgentCardState(
     val lastAckedSeq: Long = 0,
     val isReplay: Boolean = false,
     val duplicateCount: Int = 0,
-    val statusLine: String = "session=default"
+    val statusLine: String = "session=default",
+    val screenOff: Boolean = false
 )

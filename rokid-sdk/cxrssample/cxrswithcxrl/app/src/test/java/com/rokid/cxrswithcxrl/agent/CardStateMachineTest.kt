@@ -141,8 +141,8 @@ class CardStateMachineTest {
     }
 
     @Test
-    fun shouldKeepScreenOn_falseForStatus() {
-        assertFalse(CardStateMachine.shouldKeepScreenOn(AgentCardState()))
+    fun shouldKeepScreenOn_trueForStatus() {
+        assertTrue(CardStateMachine.shouldKeepScreenOn(AgentCardState()))
     }
 
     @Test
@@ -179,5 +179,46 @@ class CardStateMachineTest {
     fun shouldRouteToApproval_falseForRejected() {
         val approval = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
         assertFalse(CardStateMachine.shouldRouteToApproval(CardStateMachine.onDecision(approval, "reject")))
+    }
+
+    @Test
+    fun shouldKeepScreenOn_falseWhenScreenOff() {
+        assertFalse(CardStateMachine.shouldKeepScreenOn(AgentCardState(screenOff = true)))
+    }
+
+    @Test
+    fun setScreenOff_preservesContentAndFlips() {
+        val approval = CardStateMachine.reduce(AgentCardState(), approvalMessage(), false).state
+        val off = CardStateMachine.setScreenOff(approval, true)
+        assertTrue(off.screenOff)
+        assertEquals(approval.title, off.title)
+        assertEquals(approval.body, off.body)
+        assertEquals(approval.taskId, off.taskId)
+        assertEquals(approval.renderHint, off.renderHint)
+        assertFalse(CardStateMachine.setScreenOff(off, false).screenOff)
+    }
+
+    @Test
+    fun reduce_wakesOnNonHeartbeatEvent() {
+        val off = AgentCardState(screenOff = true)
+        val result = CardStateMachine.reduce(off, approvalMessage(), duplicate = false)
+        assertFalse(result.state.screenOff)
+    }
+
+    @Test
+    fun reduce_keepsOffOnHeartbeatEvent() {
+        val off = AgentCardState(screenOff = true)
+        val result = CardStateMachine.reduce(
+            off,
+            statusMessage(9, "heartbeat", "heartbeat", ""),
+            duplicate = false
+        )
+        assertTrue(result.state.screenOff)
+    }
+
+    @Test
+    fun resetToIdle_clearsScreenOff() {
+        val off = CardStateMachine.setScreenOff(AgentCardState(), true)
+        assertFalse(CardStateMachine.resetToIdle(off).screenOff)
     }
 }
