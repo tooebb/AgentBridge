@@ -47,6 +47,11 @@ func (h *Hub) Register(sessionID, userID string, deviceType domain.DeviceType) (
 		h.sessions[sessionID] = s
 	}
 
+	if old, ok := s.Devices[deviceType]; ok {
+		close(old)
+		log.Printf("hub: replacing existing device %s in session %s", deviceType, sessionID)
+	}
+
 	// Buffered channel to avoid blocking on slow consumers.
 	ch := make(chan []byte, 256)
 	s.Devices[deviceType] = ch
@@ -54,7 +59,7 @@ func (h *Hub) Register(sessionID, userID string, deviceType domain.DeviceType) (
 }
 
 // Unregister removes a device from a session.
-func (h *Hub) Unregister(sessionID string, deviceType domain.DeviceType) {
+func (h *Hub) Unregister(sessionID string, deviceType domain.DeviceType, ch chan []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -62,8 +67,8 @@ func (h *Hub) Unregister(sessionID string, deviceType domain.DeviceType) {
 	if !ok {
 		return
 	}
-	if ch, ok2 := s.Devices[deviceType]; ok2 {
-		close(ch)
+	if cur, ok2 := s.Devices[deviceType]; ok2 && cur == ch {
+		close(cur)
 		delete(s.Devices, deviceType)
 	}
 	if len(s.Devices) == 0 {

@@ -83,7 +83,7 @@ func HandleUpgrade(
 		data, err := json.Marshal(msg)
 		if err != nil {
 			conn.Close()
-			hub.Unregister(sessionID, deviceType)
+			hub.Unregister(sessionID, deviceType, sendCh)
 			return err
 		}
 		select {
@@ -113,7 +113,7 @@ func (h *ClientHandler) readPump() {
 			if h.isDashboard {
 				h.hub.UnsubscribeDashboard(h.sendCh)
 			} else {
-				h.hub.Unregister(h.sessionID, h.deviceType)
+				h.hub.Unregister(h.sessionID, h.deviceType, h.sendCh)
 			}
 		})
 	}()
@@ -154,7 +154,7 @@ func (h *ClientHandler) writePump() {
 			if h.isDashboard {
 				h.hub.UnsubscribeDashboard(h.sendCh)
 			} else {
-				h.hub.Unregister(h.sessionID, h.deviceType)
+				h.hub.Unregister(h.sessionID, h.deviceType, h.sendCh)
 			}
 		})
 	}()
