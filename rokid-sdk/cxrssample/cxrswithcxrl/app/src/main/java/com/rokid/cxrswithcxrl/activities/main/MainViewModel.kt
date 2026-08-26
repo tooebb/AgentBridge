@@ -396,21 +396,37 @@ class MainViewModel: ViewModel() {
             return
         }
         val card = agentCard.value
-        if (!CardStateMachine.shouldRouteToApproval(card)) {
-            // 没有待审批卡片：单击 = 开始/停止录音，其余手势无操作
+
+        if (actionType == "screen_off") {
+            _agentCard.value = CardStateMachine.setScreenOff(card, true)
+            return
+        }
+        if (actionType == "view_details") {
+            _agentCard.value = CardStateMachine.onViewDetails(card)
+            return
+        }
+        if (card.screenOff) {
             if (actionType == "approve") {
-                toggleVoice()
+                _agentCard.value = CardStateMachine.setScreenOff(card, false)
             }
             return
         }
-        val client = agentClient
-        if (client == null) {
-            _capsFromClient.value = "INPUT: agentClient null"
-            return
+        if (CardStateMachine.shouldRouteToApproval(card)) {
+            val client = agentClient
+            if (client == null) {
+                _capsFromClient.value = "INPUT: agentClient null"
+                return
+            }
+            val sent = client.sendAction(card.taskId, actionType)
+            _capsFromClient.value = "INPUT: sendAction=$sent taskId=${card.taskId} action=$actionType"
+            _agentCard.value = handler.onGestureResult(actionType, sent)
+        } else {
+            if (actionType == "approve") {
+                toggleVoice()
+            } else if (actionType == "reject") {
+                _agentCard.value = CardStateMachine.resetToIdle(card)
+            }
         }
-        val sent = client.sendAction(card.taskId, actionType)
-        _capsFromClient.value = "INPUT: sendAction=$sent taskId=${card.taskId} action=$actionType"
-        _agentCard.value = handler.onGestureResult(actionType, sent)
     }
 
     fun toggleVoice() {

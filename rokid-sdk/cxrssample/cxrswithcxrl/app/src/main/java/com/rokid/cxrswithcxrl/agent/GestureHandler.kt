@@ -32,12 +32,22 @@ class GestureHandler(
                 true
             }
 
-            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+            KeyEvent.KEYCODE_DPAD_UP -> {
                 if (now >= gestureLockUntil) {
                     pendingSecondClick?.let { clickHandler.removeCallbacks(it) }
                     pendingSecondClick = null
                     gestureLockUntil = now + SWIPE_LOCK_MS
                     onGesture(ACTION_VIEW_DETAILS)
+                }
+                true
+            }
+
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                if (now >= gestureLockUntil) {
+                    pendingSecondClick?.let { clickHandler.removeCallbacks(it) }
+                    pendingSecondClick = null
+                    gestureLockUntil = now + SWIPE_LOCK_MS
+                    onGesture(ACTION_SCREEN_OFF)
                 }
                 true
             }
@@ -71,5 +81,6 @@ class GestureHandler(
         private const val ACTION_APPROVE = "approve"
         private const val ACTION_REJECT = "reject"
         private const val ACTION_VIEW_DETAILS = "view_details"
+        private const val ACTION_SCREEN_OFF = "screen_off"
     }
 }
