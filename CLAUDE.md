@@ -114,7 +114,7 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - Plan: `docs/superpowers/plans/2026-08-11-claude-code-adapter-v2-plan.md`
 - 目标：Claude Code CLI → AgentBridge → 眼镜审批闭环（stream-json control 协议拦截 + 风控分级）— 已跑通，不追求通用插件生态
 - E2E 四场景通过：①只读工具自动放行 ②写文件 approve 执行 ③rm reject 拒绝 ④超时 auto-allow
-- 待修 bug：`docs/2026-08-14-phase3a-e2e-bugfix.md`（task_id 不一致 / Core 风险分缺口 / 30s 超时太短）
+- 遗留 bug 已修复（commit `db30e04`）：task_id 统一会话级（`currentTaskId`）/ Core 风险分沿用 adapter 传入值（`assessor.go`）/ 审批超时 30s→120s / 状态机 completed/failed 可复位。详见 `docs/2026-08-14-phase3a-e2e-bugfix.md`
 
 #### 自动镜像（交互模式）
 
