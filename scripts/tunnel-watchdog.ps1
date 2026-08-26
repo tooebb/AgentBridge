@@ -57,23 +57,15 @@ while ($true) {
         if (-not $available) { continue }
 
         $tunnel = & $adb -s $device reverse --list 2>$null
-        $needRecreate = -not ($tunnel -match "tcp:19090")
-        if (-not $needRecreate) {
-            try {
-                $test = Invoke-WebRequest -Uri "http://127.0.0.1:19090/health" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
-                if ($test.StatusCode -ne 200) { $needRecreate = $true }
-            } catch {
-                $needRecreate = $true
-            }
-        }
-
-        # Glasses also needs the audio tunnel (8788) for voice -> STT; without it
-        # the glasses sends audio to its own localhost:8788 and STT never fires.
+        # `adb reverse` listens on the device, so the tunnel can't be health-checked
+        # from the PC via 127.0.0.1:19090. Core health is already gated at the top of
+        # the loop (http://127.0.0.1:8088/health); here we only verify the tunnel is
+        # registered and recreate whichever one is missing — without --remove-all,
+        # which used to flap the audio tunnel every cycle and break voice input.
+        $needCore = -not ($tunnel -match "tcp:19090")
         $needAudio = ($device -eq $glassesDev) -and -not ($tunnel -match "tcp:8788")
 
-        if ($needRecreate) {
-            & $adb -s $device reverse --remove-all 2>$null
-            Start-Sleep -Seconds 1
+        if ($needCore) {
             & $adb -s $device reverse tcp:19090 tcp:8088
             Write-Host "[watchdog] $(Get-Date -Format 'HH:mm:ss') $device tunnel recreated"
         }
