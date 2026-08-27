@@ -151,12 +151,16 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - #89：眼镜端重连去重 `ReconnectGuard`（onFailure+onClosed 双重连去重，`agent/ReconnectGuard.kt`）
 - 条件 WakeLock：仅关键卡片（actionable/executing/rejected/alert）常亮，闲态允许熄屏（`CardStateMachine.shouldKeepScreenOn` + `MainActivity` collect `agentCard`）
 
-**仍待办（推迟到后续）**：
-- TTS 真机验证（代码已写，音频引擎初始化失败，需排查 Rokid 音频路由）— 硬阻塞语音审批
-- 语音审批（依赖 TTS 可用）
+**MVP 阶段已收敛（2026-08-27，同 WiFi 内闭环，不跨网络）**：
+
+已搁置（用户决定不推进）：
+- TTS 语音输出（音频引擎初始化失败，Rokid 音频路由问题）— 不再排查
+- 语音审批（依赖 TTS；眼镜输出以卡片文字 + 手势为主，语音输入 STT 仍可用）
+- 主动 ack 补全（seq 去重 + is_replay 已覆盖核心场景，判定不做）
+
+Launch 阶段（跨网络）再议：
 - 手机端 AgentBridgeService（作为网络中枢 fallback）
-- 主动 ack 补全（当前 seq 去重已覆盖核心场景）
-- 认证/安全层（WebSocket 当前未鉴权）
+- 认证/安全层（WebSocket 鉴权，跨网络/公网时必需）
 
 **环境启动必查（推荐一键）**：
 - 冷启动：`.\scripts\start-all.ps1`（Core + STT + watchdog + session.js）；切换项目：`cd 目标项目` 后 `.\scripts\start-session.ps1`；关底座：`.\scripts\stop-core.ps1`。详见 `docs/superpowers/specs/2026-08-25-one-click-startup-design.md`。
