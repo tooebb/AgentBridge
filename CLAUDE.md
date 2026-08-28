@@ -107,6 +107,18 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 
 **WiFi 硬件**：Qualcomm kiwi_v2 (WiFi 6)，网络 GAEA 5GHz。眼镜重启后需 ADB 开一次 WiFi（watchdog 自动执行）。
 
+### 跨网络连接（Tailscale 虚拟局域网）— 最小验证 ✅ (2026-08-29)
+
+老板建议 Tailscale 组虚拟局域网，让 PC/手机/眼镜跨网络（寝室 vs 出门）互通。已做最小验证：**组网成功**，跨网络实测留到出门。
+
+- 账号 `2817839807@`（QQ 邮箱注册，Microsoft 登录）；PC 与手机同登此号同 tailnet。
+- 电脑 Tailscale IP `100.117.117.37`；手机 `100.80.81.105`。Core `:8088` 监听 `0.0.0.0`，经 Tailscale IP `/health` 返回 `{"status":"ok"}`。
+- 现状走 DERP 中继（300~700ms，未建 P2P 直连）：审批卡片够用，跨网络语音偏卡（launch 再议）。
+
+**踩坑**：旧号 `tooebb@` 是 GitHub 登录，手机（无流量）连不上 GitHub 无法同号登录；Tailscale 只支持 Google/Microsoft/GitHub/Apple 四家 OAuth（不支持任意邮箱），中国网络下仅 Microsoft/Apple 可访问 → 改 QQ 邮箱注册新号（Microsoft）。PC 托盘 login 卡死 → 重启 `tailscale-ipn` 恢复。
+
+**待办（launch）**：真机跨网络实测（手机连别的 WiFi 访问 `http://100.117.117.37:8088/health`）；眼镜装 Tailscale（高风险，未做）。
+
 ### Phase 3（多 Agent 集成 / 生产加固）— 🔜 进行中
 
 **Phase 3a（真实本地 Agent 会话适配层 MVP）** — ✅ 真机 E2E 通过 (2026-08-14)
@@ -159,6 +171,7 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 - 主动 ack 补全（seq 去重 + is_replay 已覆盖核心场景，判定不做）
 
 Launch 阶段（跨网络）再议：
+- Tailscale 组网已最小验证 ✅（见「跨网络连接」节）；待真机跨网络实测 + 眼镜装 Tailscale
 - 手机端 AgentBridgeService（作为网络中枢 fallback）
 - 认证/安全层（WebSocket 鉴权，跨网络/公网时必需）
 
