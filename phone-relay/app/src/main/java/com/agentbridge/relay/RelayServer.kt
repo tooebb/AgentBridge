@@ -1,5 +1,6 @@
 package com.agentbridge.relay
 
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
@@ -7,10 +8,15 @@ import java.util.concurrent.ConcurrentHashMap
 open class RelayServer(
     private val config: RelayConfig,
     private val listenPort: Int = RelayConfig.LISTEN_PORT,
+    private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
 ) {
     @Volatile private var running = false
     private var serverSocket: ServerSocket? = null
     private val connections = ConcurrentHashMap.newKeySet<Socket>()
+
+    companion object {
+        const val CONNECT_TIMEOUT_MS = 5_000
+    }
 
     @Synchronized
     open fun start() {
@@ -39,7 +45,8 @@ open class RelayServer(
 
     private fun handle(client: Socket) {
         try {
-            Socket(config.host, config.port).use { upstream ->
+            Socket().use { upstream ->
+                upstream.connect(InetSocketAddress(config.host, config.port), connectTimeoutMs)
                 connections += upstream
                 try {
                     TcpRelay().relay(client, upstream)
