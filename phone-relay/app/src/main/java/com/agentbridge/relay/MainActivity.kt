@@ -1,9 +1,11 @@
 package com.agentbridge.relay
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -24,9 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
-    private var relayServer: RelayServer? = null
-    private var mdns: MdnsBroadcaster? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("relay", Context.MODE_PRIVATE)
@@ -39,24 +38,16 @@ class MainActivity : ComponentActivity() {
                 initialPort = savedPort.toString(),
                 onStart = { host, port ->
                     prefs.edit().putString("pc_host", host).putInt("pc_port", port).apply()
-                    relayServer = RelayServer(RelayConfig(host, port)).also { it.start() }
-                    mdns = MdnsBroadcaster(this, RelayConfig.LISTEN_PORT).also { it.start() }
+                    ContextCompat.startForegroundService(
+                        this,
+                        Intent(this, RelayService::class.java),
+                    )
                 },
-                onStop = ::stopRelay,
+                onStop = {
+                    stopService(Intent(this, RelayService::class.java))
+                },
             )
         }
-    }
-
-    private fun stopRelay() {
-        relayServer?.stop()
-        relayServer = null
-        mdns?.stop()
-        mdns = null
-    }
-
-    override fun onDestroy() {
-        stopRelay()
-        super.onDestroy()
     }
 }
 
