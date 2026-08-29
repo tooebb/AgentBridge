@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
             RelayScreen(
                 initialHost = savedHost,
                 initialPort = savedPort.toString(),
+                initialRunning = RelayService.isRunning,
                 onStart = { host, port ->
                     prefs.edit().putString("pc_host", host).putInt("pc_port", port).apply()
                     ContextCompat.startForegroundService(
@@ -55,12 +56,13 @@ class MainActivity : ComponentActivity() {
 fun RelayScreen(
     initialHost: String,
     initialPort: String,
+    initialRunning: Boolean,
     onStart: (String, Int) -> Unit,
     onStop: () -> Unit,
 ) {
     var host by remember { mutableStateOf(initialHost) }
     var port by remember { mutableStateOf(initialPort) }
-    var running by remember { mutableStateOf(false) }
+    var running by remember { mutableStateOf(initialRunning) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(

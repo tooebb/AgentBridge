@@ -11,7 +11,6 @@ import android.os.IBinder
 class RelayService : Service() {
     private var relayServer: RelayServer? = null
     private var mdnsBroadcaster: MdnsBroadcaster? = null
-    private var running = false
 
     override fun onCreate() {
         super.onCreate()
@@ -25,7 +24,7 @@ class RelayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification())
-        if (running) return START_STICKY
+        if (isRunning) return START_STICKY
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val host = prefs.getString(KEY_PC_HOST, RelayConfig.DEFAULT_HOST) ?: RelayConfig.DEFAULT_HOST
@@ -33,7 +32,7 @@ class RelayService : Service() {
 
         relayServer = RelayServer(RelayConfig(host, port)).also { it.start() }
         mdnsBroadcaster = MdnsBroadcaster(this, RelayConfig.LISTEN_PORT).also { it.start() }
-        running = true
+        isRunning = true
         return START_STICKY
     }
 
@@ -42,7 +41,7 @@ class RelayService : Service() {
         relayServer = null
         mdnsBroadcaster?.stop()
         mdnsBroadcaster = null
-        running = false
+        isRunning = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
@@ -56,11 +55,14 @@ class RelayService : Service() {
         .setOngoing(true)
         .build()
 
-    private companion object {
-        const val CHANNEL_ID = "relay"
-        const val NOTIFICATION_ID = 1
-        const val PREFS_NAME = "relay"
-        const val KEY_PC_HOST = "pc_host"
-        const val KEY_PC_PORT = "pc_port"
+    companion object {
+        @Volatile
+        var isRunning = false
+            private set
+        private const val CHANNEL_ID = "relay"
+        private const val NOTIFICATION_ID = 1
+        private const val PREFS_NAME = "relay"
+        private const val KEY_PC_HOST = "pc_host"
+        private const val KEY_PC_PORT = "pc_port"
     }
 }
