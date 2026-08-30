@@ -440,19 +440,13 @@ class MainViewModel: ViewModel() {
     }
 
     fun toggleVoice() {
-        val current = voiceCapture
-        if (current != null && current.state == VoiceCaptureState.RECORDING) {
-            current.stop()
-            _capsFromClient.value = "VOICE: stopped"
-            return
-        }
-
         val host = discoveredHost
         if (host.isNullOrBlank()) {
             _capsFromClient.value = "VOICE: no discovered PC host"
             return
         }
 
+        voiceCapture?.stop()
         voiceResultGate.markPending()
         val capture = VoiceCapture(
             onState = { state ->
