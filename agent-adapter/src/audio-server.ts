@@ -86,6 +86,7 @@ export interface AudioServerOptions {
   port: number;
   vad: VadOptions;
   onUtterance: (pcm: Buffer, sampleRate: number) => void | Promise<void>;
+  onConnection?: () => void;
 }
 
 export class AudioServer {
@@ -118,6 +119,7 @@ export class AudioServer {
   }
 
   private handleConnection(ws: WebSocket): void {
+    this.opts.onConnection?.();
     console.log('[audio] device connected');
     const vad = new VadSegmenter(this.opts.vad);
     ws.on('message', (data) => {

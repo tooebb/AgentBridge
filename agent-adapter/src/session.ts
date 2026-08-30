@@ -5,6 +5,7 @@ import { ClaudeCodeAdapter } from './adapters/claude.js';
 import { AgentBridgeClient } from './ws-client.js';
 import { EventNormalizer } from './normalizer.js';
 import { AudioServer } from './audio-server.js';
+import { UtteranceGate } from './utterance-gate.js';
 import { closeStt, transcribe } from './stt.js';
 import type { AgentEvent, AgentInput, DeviceAction } from './adapters/types.js';
 import type { UnifiedMessage } from './types.js';
@@ -128,13 +129,20 @@ export async function main(): Promise<void> {
   process.on('SIGTERM', () => { void shutdown(); });
 
   const audioPort = Number(process.env.AGENTBRIDGE_AUDIO_PORT || 0);
+  const gate = new UtteranceGate();
   if (audioPort > 0) {
     audioServer = new AudioServer({
       port: audioPort,
       vad: { sampleRate: 16000, speechThreshold: 60, silenceMs: 1000, preRollMs: 400 },
+      onConnection: () => gate.markNewRecording(),
       onUtterance: async (pcm, sampleRate) => {
+        const snap = gate.snapshot();
         try {
           const text = await transcribe(pcm, sampleRate);
+          if (!gate.isCurrent(snap)) {
+            console.log('[session] dropping stale utterance (re-recorded)');
+            return;
+          }
           console.log(`[session] STT: ${text}`);
           await wsClient.sendEvent(userInputEvent(sessionId, text || '（未识别到语音）'));
           if (text) {
