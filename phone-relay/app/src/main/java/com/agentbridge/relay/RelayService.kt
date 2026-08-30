@@ -7,7 +7,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -27,7 +29,6 @@ class RelayService : Service() {
             NotificationManager.IMPORTANCE_LOW,
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        registerNetworkCallback()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -41,6 +42,7 @@ class RelayService : Service() {
         relayServer = RelayServer(RelayConfig(host, port)).also { it.start() }
         mdnsBroadcaster = MdnsBroadcaster(this, RelayConfig.LISTEN_PORT).also { it.start() }
         isRunning = true
+        registerNetworkCallback()
         return START_STICKY
     }
 
@@ -66,6 +68,14 @@ class RelayService : Service() {
             override fun onAvailable(network: Network) {
                 scheduleRebroadcast()
             }
+
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
+                scheduleRebroadcast()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                scheduleRebroadcast()
+            }
         }
         networkCallback = callback
         cm.registerDefaultNetworkCallback(callback)
@@ -78,8 +88,7 @@ class RelayService : Service() {
 
     private fun rebroadcastMdns() {
         if (!isRunning) return
-        mdnsBroadcaster?.stop()
-        mdnsBroadcaster = MdnsBroadcaster(this, RelayConfig.LISTEN_PORT).also { it.start() }
+        mdnsBroadcaster?.restart()
     }
 
     private fun buildNotification(): Notification = Notification.Builder(this, CHANNEL_ID)
