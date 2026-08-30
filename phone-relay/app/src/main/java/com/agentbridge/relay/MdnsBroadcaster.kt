@@ -3,14 +3,33 @@ package com.agentbridge.relay
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 
 class MdnsBroadcaster(private val context: Context, private val listenPort: Int) {
-    private var nsdManager: NsdManager? = null
-    private var listener: NsdManager.RegistrationListener? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private val retryPolicy = RetryPolicy()
+    private var registrationListener: NsdManager.RegistrationListener? = null
+    private var retryAttempt = 0
 
     fun start() {
-        if (listener != null) return
+        if (registrationListener != null) return
+        register()
+    }
+
+    fun stop() {
+        handler.removeCallbacksAndMessages(null)
+        unregister()
+    }
+
+    fun restart() {
+        handler.removeCallbacksAndMessages(null)
+        unregister()
+        handler.postDelayed({ start() }, RESTART_DELAY_MS)
+    }
+
+    private fun register() {
         val nsd = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return
         val info = NsdServiceInfo().apply {
             serviceName = RelayConfig.SERVICE_NAME
@@ -18,32 +37,43 @@ class MdnsBroadcaster(private val context: Context, private val listenPort: Int)
             setPort(listenPort)
             RelayConfig.TXT_RECORDS.forEach { (key, value) -> setAttribute(key, value) }
         }
-        val registrationListener = object : NsdManager.RegistrationListener {
+        val listener = object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(serviceInfo: NsdServiceInfo) {
                 Log.d(TAG, "mDNS registered: ${serviceInfo.serviceName}")
+                retryAttempt = 0
             }
 
             override fun onRegistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
                 Log.w(TAG, "mDNS registration failed: $errorCode")
+                registrationListener = null
+                val delay = retryPolicy.delayMs(retryAttempt)
+                retryAttempt++
+                handler.postDelayed({ start() }, delay)
             }
 
-            override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) = Unit
-            override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) = Unit
+            override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) {
+                Log.d(TAG, "mDNS unregistered: ${serviceInfo.serviceName}")
+            }
+
+            override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                Log.w(TAG, "mDNS unregistration failed: $errorCode")
+            }
         }
-        nsdManager = nsd
-        listener = registrationListener
-        nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, registrationListener)
+        registrationListener = listener
+        nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, listener)
     }
 
-    fun stop() {
-        val nsd = nsdManager
-        val registrationListener = listener
-        listener = null
-        nsdManager = null
-        if (nsd != null && registrationListener != null) {
-            runCatching { nsd.unregisterService(registrationListener) }
+    private fun unregister() {
+        val nsd = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return
+        val listener = registrationListener
+        registrationListener = null
+        if (listener != null) {
+            runCatching { nsd.unregisterService(listener) }
         }
     }
 
-    private companion object { const val TAG = "Relay" }
+    private companion object {
+        const val TAG = "Relay"
+        const val RESTART_DELAY_MS = 300L
+    }
 }
