@@ -6,11 +6,18 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 
 class RelayService : Service() {
     private var relayServer: RelayServer? = null
     private var mdnsBroadcaster: MdnsBroadcaster? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private val rebroadcastHandler = Handler(Looper.getMainLooper())
+    private val rebroadcastRunnable = Runnable { rebroadcastMdns() }
 
     override fun onCreate() {
         super.onCreate()
@@ -20,6 +27,7 @@ class RelayService : Service() {
             NotificationManager.IMPORTANCE_LOW,
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        registerNetworkCallback()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -37,6 +45,10 @@ class RelayService : Service() {
     }
 
     override fun onDestroy() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        networkCallback?.let { cm?.unregisterNetworkCallback(it) }
+        networkCallback = null
+        rebroadcastHandler.removeCallbacks(rebroadcastRunnable)
         relayServer?.stop()
         relayServer = null
         mdnsBroadcaster?.stop()
@@ -47,6 +59,28 @@ class RelayService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun registerNetworkCallback() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                scheduleRebroadcast()
+            }
+        }
+        networkCallback = callback
+        cm.registerDefaultNetworkCallback(callback)
+    }
+
+    private fun scheduleRebroadcast() {
+        rebroadcastHandler.removeCallbacks(rebroadcastRunnable)
+        rebroadcastHandler.postDelayed(rebroadcastRunnable, REBROADCAST_DEBOUNCE_MS)
+    }
+
+    private fun rebroadcastMdns() {
+        if (!isRunning) return
+        mdnsBroadcaster?.stop()
+        mdnsBroadcaster = MdnsBroadcaster(this, RelayConfig.LISTEN_PORT).also { it.start() }
+    }
 
     private fun buildNotification(): Notification = Notification.Builder(this, CHANNEL_ID)
         .setContentTitle("AgentBridge 手机中继")
@@ -61,6 +95,7 @@ class RelayService : Service() {
             private set
         private const val CHANNEL_ID = "relay"
         private const val NOTIFICATION_ID = 1
+        private const val REBROADCAST_DEBOUNCE_MS = 500L
         private const val PREFS_NAME = "relay"
         private const val KEY_PC_HOST = "pc_host"
         private const val KEY_PC_PORT = "pc_port"
