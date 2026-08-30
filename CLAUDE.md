@@ -117,7 +117,7 @@ Middleware Core / Agent Adapter / Web Dashboard / Mock Device 可运行，协议
 
 **踩坑**：旧号 `tooebb@` 是 GitHub 登录，手机（无流量）连不上 GitHub 无法同号登录；Tailscale 只支持 Google/Microsoft/GitHub/Apple 四家 OAuth（不支持任意邮箱），中国网络下仅 Microsoft/Apple 可访问 → 改 QQ 邮箱注册新号（Microsoft）。PC 托盘 login 卡死 → 重启 `tailscale-ipn` 恢复。
 
-**待办（launch）**：真机跨网络实测（手机连别的 WiFi 访问 `http://100.117.117.37:8088/health`）；眼镜装 Tailscale（高风险，未做）。
+**真机验证（✅ 2026-08-30）**：改用手机中继方案（眼镜不装 Tailscale）——眼镜连手机热点，手机 `phone-relay` App 经 mDNS 广播 `_agentbridge._tcp` + `ServerSocket(8088)` TCP 透传到 PC `100.117.117.37:8088`。眼镜 mDNS 发现中继并注册 `ar_glasses`，连通性真机打通。PC 需放行防火墙入站 TCP 8088（规则 `AgentBridge-Tailscale-8088`）。**待办**：完整审批闭环真机验证（触发高风险工具 → 眼镜审批卡片 → 单击/双击）。
 
 ### Phase 3（多 Agent 集成 / 生产加固）— 🔜 进行中
 
