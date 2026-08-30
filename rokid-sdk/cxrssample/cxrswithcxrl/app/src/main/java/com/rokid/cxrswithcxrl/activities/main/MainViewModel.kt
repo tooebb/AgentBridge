@@ -26,6 +26,7 @@ import com.rokid.cxrswithcxrl.agent.DeviceMessage
 import com.rokid.cxrswithcxrl.agent.DiscoveredService
 import com.rokid.cxrswithcxrl.agent.VoiceCapture
 import com.rokid.cxrswithcxrl.agent.VoiceCaptureState
+import com.rokid.cxrswithcxrl.agent.VoiceResultGate
 import com.rokid.cxrswithcxrl.receiver.KeyEventListener
 import com.rokid.cxrswithcxrl.receiver.KeyReceiver
 import com.rokid.cxrswithcxrl.receiver.KeyType
@@ -55,6 +56,7 @@ class MainViewModel: ViewModel() {
     private var agentClient: AgentBridgeClient? = null
     private var actionHandler: AgentActionHandler? = null
     private var voiceCapture: VoiceCapture? = null
+    private val voiceResultGate = VoiceResultGate()
     private var discoveredHost: String? = null
     private val audioPort = 8788
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
@@ -340,8 +342,15 @@ class MainViewModel: ViewModel() {
 
                 override fun onMessage(message: DeviceMessage, duplicate: Boolean) {
                     when (message.event?.eventType) {
-                        "user_input" -> _voiceStatus.value = "已识别: ${message.event?.body.orEmpty()}（处理中…）"
-                        "task_completed", "task_failed", "needs_approval" -> _voiceStatus.value = ""
+                        "user_input" -> {
+                            if (voiceResultGate.shouldDisplayResult()) {
+                                _voiceStatus.value = "已识别: ${message.event?.body.orEmpty()}（处理中…）"
+                            }
+                        }
+                        "task_completed", "task_failed", "needs_approval" -> {
+                            _voiceStatus.value = ""
+                            voiceResultGate.cancel()
+                        }
                     }
                     _agentCard.value = handler.reduce(message, duplicate)
                     _debugStatus.value = debugText(
@@ -424,6 +433,7 @@ class MainViewModel: ViewModel() {
             if (actionType == "approve") {
                 toggleVoice()
             } else if (actionType == "reject") {
+                cancelVoice()
                 _agentCard.value = CardStateMachine.resetToIdle(card)
             }
         }
@@ -443,6 +453,7 @@ class MainViewModel: ViewModel() {
             return
         }
 
+        voiceResultGate.markPending()
         val capture = VoiceCapture(
             onState = { state ->
                 _capsFromClient.value = "VOICE: ${state.name.lowercase()}"
@@ -457,6 +468,13 @@ class MainViewModel: ViewModel() {
         )
         voiceCapture = capture
         capture.start("ws://$host:$audioPort")
+    }
+
+    private fun cancelVoice() {
+        voiceResultGate.cancel()
+        voiceCapture?.stop()
+        voiceCapture = null
+        _voiceStatus.value = ""
     }
 
     private fun parseCaps(caps: Caps): String {
