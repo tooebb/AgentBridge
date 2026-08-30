@@ -112,25 +112,37 @@ func currentIPv4Set() ipv4Set {
 	}
 
 	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
 		ifaceAddrs, err := iface.Addrs()
 		if err != nil {
 			log.Printf("mdns: failed to list addresses for %s: %v", iface.Name, err)
 			continue
 		}
-		for _, addr := range ifaceAddrs {
-			ip := ipv4FromAddr(addr)
-			if ip == "" || ip == "0.0.0.0" {
-				continue
-			}
-			addrs = append(addrs, ip)
-		}
+		addrs = append(addrs, trackIPv4s(iface.Flags, ifaceAddrs)...)
 	}
 
 	sort.Strings(addrs)
 	return ipv4Set(addrs)
+}
+
+// trackIPv4s returns the IPv4 addresses that should drive mDNS change
+// detection for one interface. It mirrors zeroconf's listMulticastInterfaces:
+// only UP + multicast-capable, non-loopback interfaces are broadcast, so only
+// those IPs matter. Virtual adapters (Tailscale/FlClash TUN, link-local-only
+// NICs) are UP but not multicast, so their address churn must not trigger
+// spurious re-registers.
+func trackIPv4s(flags net.Flags, addrs []net.Addr) []string {
+	if flags&net.FlagUp == 0 || flags&net.FlagLoopback != 0 || flags&net.FlagMulticast == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		ip := ipv4FromAddr(addr)
+		if ip == "" || ip == "0.0.0.0" {
+			continue
+		}
+		out = append(out, ip)
+	}
+	return out
 }
 
 func ipv4FromAddr(addr net.Addr) string {
