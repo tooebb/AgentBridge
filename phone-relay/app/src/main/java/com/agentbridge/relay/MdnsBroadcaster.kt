@@ -5,7 +5,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
 
-class MdnsBroadcaster(private val context: Context, private val port: Int) {
+class MdnsBroadcaster(private val context: Context, private val listenPort: Int) {
     private var nsdManager: NsdManager? = null
     private var listener: NsdManager.RegistrationListener? = null
 
@@ -15,7 +15,7 @@ class MdnsBroadcaster(private val context: Context, private val port: Int) {
         val info = NsdServiceInfo().apply {
             serviceName = RelayConfig.SERVICE_NAME
             serviceType = RelayConfig.SERVICE_TYPE
-            setPort(port)
+            setPort(listenPort)
             RelayConfig.TXT_RECORDS.forEach { (key, value) -> setAttribute(key, value) }
         }
         val registrationListener = object : NsdManager.RegistrationListener {
