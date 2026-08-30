@@ -5,6 +5,7 @@ data class RelayConfig(val host: String, val port: Int) {
         const val DEFAULT_HOST = "100.117.117.37"
         const val DEFAULT_PORT = 8088
         const val LISTEN_PORT = 8088
+        const val AUDIO_PORT = 8788
         const val SERVICE_TYPE = "_agentbridge._tcp"
         const val SERVICE_NAME = "AgentBridge-phone-relay"
         val TXT_RECORDS = mapOf(

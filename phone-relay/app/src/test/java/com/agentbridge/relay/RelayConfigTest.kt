@@ -8,6 +8,7 @@ class RelayConfigTest {
     @Test fun defaultsMatchSpec() {
         assertEquals("100.117.117.37", RelayConfig.DEFAULT_HOST)
         assertEquals(8088, RelayConfig.DEFAULT_PORT)
+        assertEquals(8788, RelayConfig.AUDIO_PORT)
         assertEquals("_agentbridge._tcp", RelayConfig.SERVICE_TYPE)
         assertEquals("AgentBridge-phone-relay", RelayConfig.SERVICE_NAME)
     }

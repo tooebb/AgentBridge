@@ -16,6 +16,7 @@ import android.os.Looper
 
 class RelayService : Service() {
     private var relayServer: RelayServer? = null
+    private var audioServer: RelayServer? = null
     private var mdnsBroadcaster: MdnsBroadcaster? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val rebroadcastHandler = Handler(Looper.getMainLooper())
@@ -40,6 +41,10 @@ class RelayService : Service() {
         val port = prefs.getInt(KEY_PC_PORT, RelayConfig.DEFAULT_PORT)
 
         relayServer = RelayServer(RelayConfig(host, port)).also { it.start() }
+        audioServer = RelayServer(
+            RelayConfig(host, RelayConfig.AUDIO_PORT),
+            RelayConfig.AUDIO_PORT,
+        ).also { it.start() }
         mdnsBroadcaster = MdnsBroadcaster(this, RelayConfig.LISTEN_PORT).also { it.start() }
         isRunning = true
         registerNetworkCallback()
@@ -53,6 +58,8 @@ class RelayService : Service() {
         rebroadcastHandler.removeCallbacks(rebroadcastRunnable)
         relayServer?.stop()
         relayServer = null
+        audioServer?.stop()
+        audioServer = null
         mdnsBroadcaster?.stop()
         mdnsBroadcaster = null
         isRunning = false
@@ -93,7 +100,7 @@ class RelayService : Service() {
 
     private fun buildNotification(): Notification = Notification.Builder(this, CHANNEL_ID)
         .setContentTitle("AgentBridge 手机中继")
-        .setContentText("中继运行中（监听 :${RelayConfig.LISTEN_PORT}）")
+        .setContentText("中继运行中（监听 :${RelayConfig.LISTEN_PORT} / :${RelayConfig.AUDIO_PORT}）")
         .setSmallIcon(android.R.drawable.ic_dialog_info)
         .setOngoing(true)
         .build()
