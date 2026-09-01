@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200mm" height="2000mm" viewBox="0 0 1200 2000">
+  <title>OPC 22 - AgentBridge AI Agent 跨设备交互中间层</title>
+  <desc>北京大学生“超级个体”（OPC）创业大赛现场决赛项目展板设计稿</desc>
+  <defs>
+    <linearGradient id="headerGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071B3A"/>
+      <stop offset="0.54" stop-color="#0B3E69"/>
+      <stop offset="1" stop-color="#087E91"/>
+    </linearGradient>
+    <linearGradient id="tealGradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0B8FA1"/>
+      <stop offset="1" stop-color="#38C7C4"/>
+    </linearGradient>
+    <linearGradient id="coralGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF6A5C"/>
+      <stop offset="1" stop-color="#E53D54"/>
+    </linearGradient>
+    <linearGradient id="panelGradient" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F5FAFD"/>
+    </linearGradient>
+    <linearGradient id="pageGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F7FCFE"/>
+      <stop offset="0.46" stop-color="#EAF5FA"/>
+      <stop offset="1" stop-color="#F9FCFE"/>
+    </linearGradient>
+    <linearGradient id="headerLight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.56" stop-color="#F0F8FC"/>
+      <stop offset="1" stop-color="#DDEFF6"/>
+    </linearGradient>
+    <linearGradient id="evidenceGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071B3A"/>
+      <stop offset="0.55" stop-color="#0A3155"/>
+      <stop offset="1" stop-color="#075D70"/>
+    </linearGradient>
+    <linearGradient id="heroPanel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EEF8FB"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#74E3E0" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#74E3E0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="heroGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#7FE3DE" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#7FE3DE" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#2B7CA5" stroke-opacity="0.09" stroke-width="1"/>
+      <circle cx="0" cy="0" r="2" fill="#2B7CA5" fill-opacity="0.14"/>
+    </pattern>
+    <pattern id="circuit" width="120" height="80" patternUnits="userSpaceOnUse">
+      <path d="M0 18H36L52 34H96M22 64H72L88 48H120M104 0V22L88 38" fill="none" stroke="#1A7A9E" stroke-opacity="0.20" stroke-width="1.5"/>
+      <circle cx="36" cy="18" r="3" fill="#1A7A9E" fill-opacity="0.25"/>
+      <circle cx="96" cy="34" r="3" fill="#1A7A9E" fill-opacity="0.25"/>
+      <circle cx="72" cy="64" r="3" fill="#1A7A9E" fill-opacity="0.25"/>
+    </pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0A2847" flood-opacity="0.12"/>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0A2847" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrowTeal" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0L10 5L0 10Z" fill="#0B9EAA"/>
+    </marker>
+    <marker id="arrowCoral" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0L10 5L0 10Z" fill="#EF5362"/>
+    </marker>
+    <marker id="arrowFlow" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0L12 6L0 12Z" fill="#0B9EAA"/>
+    </marker>
+    <marker id="arrowLoop" markerWidth="13" markerHeight="13" refX="12" refY="6.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0L13 6.5L0 13Z" fill="#EF5362"/>
+    </marker>
+    <style><![CDATA[
+      .sans { font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+      .display-latin { font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+      .display-cjk { font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+      .ink { fill: #0B2748; }
+      .muted { fill: #526A7E; }
+      .teal { fill: #087F90; }
+      .coral { fill: #E9485B; }
+      .white { fill: #FFFFFF; }
+      .heavy { font-weight: 800; }
+      .bold { font-weight: 700; }
+      .medium { font-weight: 600; }
+      .section-no { font-size: 18px; font-weight: 800; letter-spacing: 2px; fill: #E9485B; }
+      .section-title { font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; font-size: 30px; font-weight: 800; fill: #0B2748; }
+      .card-title { font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; font-size: 22px; font-weight: 800; fill: #0B2748; }
+      .body { font-size: 17px; font-weight: 500; fill: #27445E; }
+      .small { font-size: 14px; font-weight: 500; fill: #526A7E; }
+      .tiny { font-size: 12px; font-weight: 500; fill: #6C8191; }
+      .rule { stroke: #D5E5EE; stroke-width: 1.5; }
+      .card { fill: url(#panelGradient); stroke: #D6E7EF; stroke-width: 1.5; }
+    ]]></style>
+  </defs>
+
+  <!-- Page and hybrid poster header -->
+  <rect width="1200" height="2000" fill="url(#pageGradient)"/>
+  <circle cx="1135" cy="530" r="230" fill="none" stroke="#0B8FA1" stroke-opacity="0.07" stroke-width="2"/>
+  <circle cx="1135" cy="530" r="178" fill="none" stroke="#0B8FA1" stroke-opacity="0.05" stroke-width="2"/>
+  <path d="M-80 1270C250 1145 470 1305 775 1205S1120 1115 1280 1215" fill="none" stroke="#1986A1" stroke-opacity="0.07" stroke-width="3"/>
+  <path d="M-40 1605C300 1490 505 1630 805 1530S1110 1455 1250 1525" fill="none" stroke="#1986A1" stroke-opacity="0.05" stroke-width="2"/>
+
+  <rect width="1200" height="265" fill="url(#headerLight)"/>
+  <rect x="705" y="0" width="495" height="265" fill="url(#circuit)" opacity="0.52"/>
+  <circle cx="1085" cy="62" r="185" fill="url(#glow)"/>
+  <circle cx="1085" cy="62" r="150" fill="none" stroke="#0B8FA1" stroke-opacity="0.13" stroke-width="2"/>
+  <circle cx="1085" cy="62" r="105" fill="none" stroke="#0B8FA1" stroke-opacity="0.10" stroke-width="2"/>
+  <path d="M0 0H330L263 265H0Z" fill="#082B4F"/>
+  <path d="M0 178C92 150 186 170 286 130L263 265H0Z" fill="#0B4A6E" fill-opacity="0.58"/>
+  <path d="M329 0H349L282 265H262Z" fill="#FFFFFF"/>
+  <path d="M349 0H358L291 265H282Z" fill="url(#coralGradient)"/>
+  <path d="M26 211H238M52 231H214" stroke="#54CED1" stroke-opacity="0.38" stroke-width="2"/>
+  <circle cx="26" cy="211" r="4" fill="#6AE1DE"/><circle cx="238" cy="211" r="4" fill="#6AE1DE"/>
+
+  <text x="132" y="128" text-anchor="middle" class="sans white heavy" font-size="96">22</text>
+  <text x="132" y="169" text-anchor="middle" class="sans white bold" font-size="20">项目编号</text>
+  <text x="360" y="47" class="sans ink medium" font-size="20">2026 北京大学生“超级个体”（OPC）创业大赛</text>
+  <rect x="360" y="60" width="262" height="7" rx="3.5" fill="url(#coralGradient)"/>
+  <text x="360" y="127" class="sans ink heavy" font-size="60">AgentBridge</text>
+  <text x="360" y="176" class="sans teal bold" font-size="34">AI Agent 跨设备交互中间层</text>
+  <text x="360" y="224" class="sans ink medium" font-size="19">离开电脑，用眼镜发起任务、同步进度并确认关键操作。</text>
+  <rect x="858" y="205" width="302" height="38" rx="19" fill="#0B2748"/>
+  <text x="1009" y="230" text-anchor="middle" class="sans white medium" font-size="13">语音输入 · 同步镜像 · 会话接力 · 手势确认</text>
+
+  <!-- Identity strip -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="285" width="1120" height="126" rx="24" fill="#FFFFFF" stroke="#D6E7EF" stroke-width="1.5"/>
+  </g>
+  <text x="62" y="326" class="sans coral bold" font-size="14">项目负责人</text>
+  <text x="62" y="360" class="sans ink heavy" font-size="27">尤佳馨</text>
+  <text x="170" y="360" class="sans muted medium" font-size="18">中国传媒大学 · 智能科学与技术</text>
+  <text x="62" y="389" class="sans muted medium" font-size="15">项目角色：问题定义、产品设计、系统实现与真机验证</text>
+  <line x1="638" y1="308" x2="638" y2="388" class="rule"/>
+  <text x="666" y="326" class="sans teal bold" font-size="14">真实场景方</text>
+  <text x="666" y="356" class="sans ink bold" font-size="21">北京云中盖娅科技有限公司</text>
+  <text x="666" y="386" class="sans muted medium" font-size="15">业务背景：体系仿真与 AI 智能体</text>
+  <rect x="1010" y="329" width="126" height="38" rx="19" fill="#DDF5F1"/>
+  <text x="1073" y="354" text-anchor="middle" class="sans teal heavy" font-size="17">V3 内部测试</text>
+
+  <!-- 01 Context -->
+  <text x="40" y="456" class="sans section-no">01 / CONTEXT</text>
+  <text x="40" y="493" class="sans section-title">真实问题与应用场景</text>
+  <line x1="370" y1="480" x2="1160" y2="480" stroke="#BFD5E1" stroke-width="2"/>
+
+  <g filter="url(#softShadow)">
+    <rect x="40" y="515" width="352" height="174" rx="22" class="card"/>
+    <rect x="424" y="515" width="352" height="174" rx="22" class="card"/>
+    <rect x="808" y="515" width="352" height="174" rx="22" class="card"/>
+  </g>
+  <rect x="40" y="515" width="352" height="7" rx="3.5" fill="url(#tealGradient)"/>
+  <rect x="424" y="515" width="352" height="7" rx="3.5" fill="#2B71A5"/>
+  <rect x="808" y="515" width="352" height="7" rx="3.5" fill="url(#coralGradient)"/>
+
+  <rect x="58" y="534" width="48" height="29" rx="14.5" fill="#E3F4F5"/>
+  <text x="82" y="554" text-anchor="middle" class="sans teal heavy" font-size="14">背景</text>
+  <text x="118" y="556" class="sans card-title">从企业真实需求出发</text>
+  <text x="60" y="583" class="sans body" style="font-size:15px">
+    <tspan x="60" dy="0">项目源于北京云中盖娅科技有限公司</tspan>
+    <tspan x="60" dy="19">开放的真实业务场景。AI Agent 可以</tspan>
+    <tspan x="60" dy="19">持续执行复杂任务，但用户离开电脑后</tspan>
+    <tspan x="60" dy="19">仍缺少自然发起、进度同步与关键确认</tspan>
+    <tspan x="60" dy="19">的轻量入口。项目以 4-6 周为 MVP 周期，</tspan>
+    <tspan x="60" dy="19">选择智能眼镜验证跨设备会话接力。</tspan>
+  </text>
+
+  <rect x="442" y="534" width="48" height="29" rx="14.5" fill="#E3F4F5"/>
+  <text x="466" y="554" text-anchor="middle" class="sans teal heavy" font-size="14">用户</text>
+  <text x="502" y="556" class="sans card-title">移动中的 Agent 使用者</text>
+  <text x="444" y="591" class="sans body">
+    <tspan x="444" dy="0">• 用户：AI Agent 开发者、研发负责人</tspan>
+    <tspan x="444" dy="27">• 场景：通勤、开会、走动、离开电脑</tspan>
+    <tspan x="444" dy="27">• 环节：语音发起、进度同步、关键确认</tspan>
+  </text>
+
+  <rect x="826" y="534" width="48" height="29" rx="14.5" fill="#FDE8E9"/>
+  <text x="850" y="554" text-anchor="middle" class="sans coral heavy" font-size="14">痛点</text>
+  <text x="886" y="556" class="sans card-title">输入、同步与连续性</text>
+  <text x="828" y="591" class="sans body">
+    <tspan x="828" dy="0">• 离开电脑后难以随口追加新指令</tspan>
+    <tspan x="828" dy="27">• Agent 状态与回复难同步到随身终端</tspan>
+    <tspan x="828" dy="27">• 关键操作等待确认，会话容易被打断</tspan>
+  </text>
+
+  <!-- 02 Solution and workflow -->
+  <text x="40" y="738" class="sans section-no">02 / SOLUTION</text>
+  <text x="40" y="775" class="sans section-title">让一个 Agent 会话在电脑与眼镜之间双向接力</text>
+  <line x1="820" y1="762" x2="1160" y2="762" stroke="#BFD5E1" stroke-width="2"/>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="798" width="1120" height="478" rx="28" fill="url(#heroPanel)" stroke="#BFDCE6" stroke-width="1.5"/>
+  </g>
+  <rect x="40" y="798" width="1120" height="67" rx="28" fill="url(#headerGradient)"/>
+  <rect x="40" y="835" width="1120" height="30" fill="#0B3154"/>
+  <path d="M40 798H105L84 865H40Z" fill="#E9485B" fill-opacity="0.92"/>
+  <text x="66" y="838" class="sans white heavy" font-size="22">交付形态</text>
+  <text x="188" y="838" class="sans white medium" font-size="18">语音输入 + 同步镜像 + 会话接力 + 风险确认</text>
+  <rect x="928" y="815" width="204" height="34" rx="17" fill="#22A5B0"/>
+  <text x="1030" y="838" text-anchor="middle" class="sans white bold" font-size="15">5 步完整交互体验</text>
+  <ellipse cx="600" cy="986" rx="505" ry="176" fill="url(#heroGlow)"/>
+  <path d="M105 993H1095" stroke="#6FD3D5" stroke-opacity="0.24" stroke-width="15" stroke-linecap="round"/>
+
+  <!-- Flow node 1 -->
+  <g>
+    <rect x="64" y="890" width="178" height="206" rx="20" fill="#103F74"/>
+    <circle cx="92" cy="920" r="18" fill="#FFFFFF"/>
+    <text x="92" y="927" text-anchor="middle" class="sans ink heavy" font-size="17">1</text>
+    <rect x="136" y="908" width="34" height="48" rx="17" fill="none" stroke="#8FDCF0" stroke-width="4"/>
+    <path d="M124 943C124 961 136 970 153 970C170 970 182 961 182 943M153 970V980M137 980H169" fill="none" stroke="#8FDCF0" stroke-width="4" stroke-linecap="round"/>
+    <text x="153" y="1005" text-anchor="middle" class="sans white heavy" font-size="20">眼镜语音输入</text>
+    <text x="153" y="1035" text-anchor="middle" class="sans white medium" font-size="14">单击开始聆听</text>
+    <text x="153" y="1059" text-anchor="middle" class="sans white medium" font-size="14">VAD 自动切句</text>
+    <text x="153" y="1082" text-anchor="middle" class="sans" fill="#95DCEB" font-size="12">自然发起 / 追问</text>
+  </g>
+
+  <!-- Flow node 2 -->
+  <g>
+    <rect x="270" y="890" width="178" height="206" rx="20" fill="#E5F6F6" stroke="#A9DDE0" stroke-width="1.5"/>
+    <circle cx="298" cy="920" r="18" fill="#0B9EAA"/>
+    <text x="298" y="927" text-anchor="middle" class="sans white heavy" font-size="17">2</text>
+    <path d="M340 912H398M340 928H386M340 944H374" stroke="#0B8FA1" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="329" cy="912" r="5" fill="#0B8FA1"/><circle cx="329" cy="928" r="5" fill="#0B8FA1"/><circle cx="329" cy="944" r="5" fill="#0B8FA1"/>
+    <text x="359" y="1005" text-anchor="middle" class="sans ink heavy" font-size="20">识别与输入门控</text>
+    <text x="359" y="1035" text-anchor="middle" class="sans muted medium" font-size="14">faster-whisper 转写</text>
+    <text x="359" y="1059" text-anchor="middle" class="sans muted medium" font-size="14">重录仅保留最新一句</text>
+    <text x="359" y="1082" text-anchor="middle" class="sans teal bold" font-size="12">中文 STT</text>
+  </g>
+
+  <!-- Flow node 3 -->
+  <g>
+    <rect x="476" y="890" width="190" height="206" rx="20" fill="#DDEBF8" stroke="#A9C9E4" stroke-width="1.5"/>
+    <circle cx="504" cy="920" r="18" fill="#145995"/>
+    <text x="504" y="927" text-anchor="middle" class="sans white heavy" font-size="17">3</text>
+    <rect x="547" y="909" width="60" height="16" rx="6" fill="#145995"/>
+    <rect x="537" y="930" width="80" height="16" rx="6" fill="#2376AD"/>
+    <rect x="527" y="951" width="100" height="16" rx="6" fill="#3F9CC2"/>
+    <text x="571" y="1005" text-anchor="middle" class="sans ink heavy" font-size="20">注入同一会话</text>
+    <text x="571" y="1035" text-anchor="middle" class="sans muted medium" font-size="14">Session Bridge / resume</text>
+    <text x="571" y="1059" text-anchor="middle" class="sans muted medium" font-size="14">上下文持续，不重开任务</text>
+    <text x="571" y="1082" text-anchor="middle" class="sans teal bold" font-size="12">会话接力</text>
+  </g>
+
+  <!-- Flow node 4 -->
+  <g>
+    <rect x="694" y="890" width="178" height="206" rx="20" fill="#E5F6F6" stroke="#A9DDE0" stroke-width="1.5"/>
+    <circle cx="722" cy="920" r="18" fill="#0B9EAA"/>
+    <text x="722" y="927" text-anchor="middle" class="sans white heavy" font-size="17">4</text>
+    <rect x="743" y="910" width="80" height="52" rx="5" fill="none" stroke="#0B8FA1" stroke-width="4"/>
+    <path d="M733 971H833M760 962V971M806 962V971" fill="none" stroke="#0B8FA1" stroke-width="4" stroke-linecap="round"/>
+    <text x="783" y="1005" text-anchor="middle" class="sans ink heavy" font-size="20">PC Agent 执行</text>
+    <text x="783" y="1035" text-anchor="middle" class="sans muted medium" font-size="14">Claude Code / Codex</text>
+    <text x="783" y="1059" text-anchor="middle" class="sans muted medium" font-size="14">任务、工具与结果</text>
+    <text x="783" y="1082" text-anchor="middle" class="sans teal bold" font-size="12">执行与产出</text>
+  </g>
+
+  <!-- Flow node 5 / implemented UI representation -->
+  <g>
+    <rect x="900" y="890" width="236" height="206" rx="20" fill="#112034" stroke="#5BB9C4" stroke-width="2"/>
+    <circle cx="928" cy="920" r="18" fill="url(#coralGradient)"/>
+    <text x="928" y="927" text-anchor="middle" class="sans white heavy" font-size="17">5</text>
+    <text x="962" y="925" class="sans white heavy" font-size="18">同步镜像与确认</text>
+    <rect x="920" y="943" width="196" height="106" rx="12" fill="#224C3A"/>
+    <text x="935" y="965" class="sans" fill="#B9FBC0" font-size="10">已连接 · 同步镜像</text>
+    <text x="935" y="990" class="sans white bold" font-size="15">任务进度 3 / 4</text>
+    <text x="935" y="1012" class="sans" fill="#E8EAED" font-size="11">回复已回传；关键操作等待确认</text>
+    <rect x="935" y="1022" width="68" height="19" rx="9.5" fill="#13A57E"/>
+    <rect x="1012" y="1022" width="68" height="19" rx="9.5" fill="#D64A55"/>
+    <text x="969" y="1036" text-anchor="middle" class="sans white bold" font-size="9">单击批准</text>
+    <text x="1046" y="1036" text-anchor="middle" class="sans white bold" font-size="9">双击拒绝</text>
+    <text x="1018" y="1074" text-anchor="middle" class="sans" fill="#92DCE4" font-size="11">状态 / 回复 / 审批卡 · 手势确认</text>
+    <text x="1018" y="1089" text-anchor="middle" class="sans" fill="#8099A8" font-size="9">文字卡片同步，不依赖 TTS 输出</text>
+  </g>
+
+  <!-- Flow arrows -->
+  <path d="M248 993H264" stroke="#0B9EAA" stroke-width="3.5" marker-end="url(#arrowFlow)"/>
+  <path d="M454 993H470" stroke="#0B9EAA" stroke-width="3.5" marker-end="url(#arrowFlow)"/>
+  <path d="M672 993H688" stroke="#0B9EAA" stroke-width="3.5" marker-end="url(#arrowFlow)"/>
+  <path d="M878 993H894" stroke="#0B9EAA" stroke-width="3.5" marker-end="url(#arrowFlow)"/>
+  <path d="M1087 1110C1087 1150 1040 1160 996 1160H208C156 1160 130 1136 130 1110" fill="none" stroke="#E9485B" stroke-width="4" stroke-dasharray="10 7" marker-end="url(#arrowLoop)"/>
+  <rect x="330" y="1138" width="540" height="44" rx="22" fill="#FFF1F1" stroke="#F6BDC3"/>
+  <text x="600" y="1166" text-anchor="middle" class="sans coral heavy" font-size="15">状态与文字回复回传 → 手势确认或语音追问 → 同一会话继续</text>
+
+  <!-- Capability strip -->
+  <rect x="64" y="1197" width="1072" height="58" rx="17" fill="#F1F7FA"/>
+  <circle cx="91" cy="1226" r="14" fill="#0B9EAA"/>
+  <path d="M84 1226L89 1231L99 1220" fill="none" stroke="#FFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="115" y="1223" class="sans ink bold" font-size="15">语音续接</text>
+  <text x="115" y="1243" class="sans muted medium" font-size="12">VAD/STT、退出重录、只处理最新一句</text>
+  <line x1="400" y1="1208" x2="400" y2="1244" class="rule"/>
+  <circle cx="431" cy="1226" r="14" fill="#145995"/>
+  <path d="M431 1216V1236M421 1226H441" stroke="#FFF" stroke-width="3" stroke-linecap="round"/>
+  <text x="455" y="1223" class="sans ink bold" font-size="15">同步镜像</text>
+  <text x="455" y="1243" class="sans muted medium" font-size="12">任务状态、文字回复与审批卡自动回传</text>
+  <line x1="756" y1="1208" x2="756" y2="1244" class="rule"/>
+  <circle cx="787" cy="1226" r="14" fill="#E9485B"/>
+  <path d="M780 1226H794M787 1219V1233" stroke="#FFF" stroke-width="3" stroke-linecap="round"/>
+  <text x="811" y="1223" class="sans ink bold" font-size="15">同一会话接力</text>
+  <text x="811" y="1243" class="sans muted medium" font-size="12">PC / 眼镜顺序 resume，上下文连续</text>
+
+  <!-- 03 Evidence -->
+  <text x="40" y="1324" class="sans section-no">03 / EVIDENCE</text>
+  <text x="40" y="1361" class="sans section-title">可复核的原型验证</text>
+  <line x1="550" y1="1348" x2="1160" y2="1348" stroke="#BFD5E1" stroke-width="2"/>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="1384" width="1120" height="154" rx="24" fill="url(#evidenceGradient)"/>
+  </g>
+  <rect x="40" y="1384" width="1120" height="7" rx="3.5" fill="url(#tealGradient)"/>
+  <line x1="413" y1="1403" x2="413" y2="1519" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="1.5"/>
+  <line x1="797" y1="1403" x2="797" y2="1519" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="1.5"/>
+
+  <text x="68" y="1437" class="sans heavy" fill="#71E0DC" font-size="30">自然语音续接</text>
+  <rect x="270" y="1400" width="98" height="26" rx="13" fill="#FFFFFF" fill-opacity="0.13" stroke="#71E0DC" stroke-opacity="0.45"/>
+  <text x="319" y="1418" text-anchor="middle" class="sans white bold" font-size="11">已验证 · 真机</text>
+  <text x="68" y="1470" class="sans white bold" font-size="17">说一句即可继续同一 Agent 会话</text>
+  <text x="68" y="1497" class="sans medium" fill="#C1D9E5" font-size="14">真机完整流程｜2026-08-26</text>
+  <text x="68" y="1520" class="sans" fill="#98B8C8" font-size="12">支持退出、重录与“只处理最新一句”输入门控</text>
+
+  <text x="452" y="1437" class="sans white heavy" font-size="30">同步镜像闭环</text>
+  <rect x="654" y="1400" width="98" height="26" rx="13" fill="#FFFFFF" fill-opacity="0.13" stroke="#A9D4FF" stroke-opacity="0.45"/>
+  <text x="703" y="1418" text-anchor="middle" class="sans white bold" font-size="11">已验证 · E2E</text>
+  <text x="452" y="1470" class="sans white bold" font-size="17">状态、回复与关键操作自动回传</text>
+  <text x="452" y="1497" class="sans medium" fill="#C1D9E5" font-size="14">真实 Agent 交互｜2026-08-19</text>
+  <text x="452" y="1520" class="sans" fill="#98B8C8" font-size="12">覆盖静默放行、风险确认、拒绝与超时处理</text>
+
+  <text x="836" y="1437" class="sans heavy" fill="#FF8B91" font-size="30">跨网接力连通</text>
+  <rect x="1038" y="1400" width="98" height="26" rx="13" fill="#FFFFFF" fill-opacity="0.13" stroke="#FF9EA4" stroke-opacity="0.50"/>
+  <text x="1087" y="1418" text-anchor="middle" class="sans white bold" font-size="11">已验证 · 连通</text>
+  <text x="836" y="1470" class="sans white bold" font-size="17">眼镜经手机中继发现并连接 PC</text>
+  <text x="836" y="1497" class="sans medium" fill="#C1D9E5" font-size="14">真机连通验证｜2026-08-30</text>
+  <text x="836" y="1520" class="sans" fill="#98B8C8" font-size="12">完成 mDNS 发现、设备注册与透明转发</text>
+
+  <!-- Deliverables and differentiators -->
+  <g filter="url(#softShadow)">
+    <rect x="40" y="1562" width="548" height="166" rx="22" fill="#FFFFFF" stroke="#CFE2EB"/>
+    <rect x="612" y="1562" width="548" height="166" rx="22" fill="#FFFFFF" stroke="#CFE2EB"/>
+  </g>
+  <text x="62" y="1598" class="sans card-title">已形成的交付成果</text>
+  <rect x="434" y="1577" width="126" height="28" rx="14" fill="#DDF5F1"/>
+  <text x="497" y="1597" text-anchor="middle" class="sans teal bold" font-size="12">阶段成果已形成</text>
+  <circle cx="70" cy="1628" r="7" fill="#0B9EAA"/><text x="88" y="1634" class="sans body">语音输入 + Session Bridge 会话接力链路</text>
+  <circle cx="70" cy="1667" r="7" fill="#0B9EAA"/><text x="88" y="1673" class="sans body">状态 / 回复 / 审批同步镜像 + 眼镜端</text>
+  <circle cx="70" cy="1706" r="7" fill="#0B9EAA"/><text x="88" y="1712" class="sans body">Core、手机中继、一键启动与测试材料</text>
+
+  <text x="634" y="1598" class="sans card-title">创新点与差异</text>
+  <text x="634" y="1634" class="sans body"><tspan class="display-latin coral heavy">01</tspan><tspan dx="16">从移动提醒升级为双向语音 / 镜像交互</tspan></text>
+  <text x="634" y="1673" class="sans body"><tspan class="display-latin coral heavy">02</tspan><tspan dx="16">PC 与眼镜顺序接力同一个 Agent 会话</tspan></text>
+  <text x="634" y="1712" class="sans body"><tspan class="display-latin coral heavy">03</tspan><tspan dx="16">输入门控、状态镜像与风控回写一体化</tspan></text>
+
+  <!-- 04 Delivery path -->
+  <text x="40" y="1772" class="sans section-no">04 / NEXT</text>
+  <text x="40" y="1809" class="sans section-title">实施路径与合作方向</text>
+  <line x1="383" y1="1796" x2="1160" y2="1796" stroke="#BFD5E1" stroke-width="2"/>
+
+  <rect x="40" y="1832" width="786" height="108" rx="22" fill="#0B2748"/>
+  <g>
+    <circle cx="82" cy="1872" r="20" fill="#17AAB3"/>
+    <text x="82" y="1879" text-anchor="middle" class="sans white heavy" font-size="17">1</text>
+    <text x="116" y="1865" class="sans white bold" font-size="17">目前完成</text>
+    <text x="116" y="1892" class="sans" fill="#AFC9D9" font-size="13">语音 / 镜像 / 审批真机闭环</text>
+    <path d="M264 1872H302" stroke="#54CED1" stroke-width="3" marker-end="url(#arrowTeal)"/>
+    <circle cx="336" cy="1872" r="20" fill="#2B71A5"/>
+    <text x="336" y="1879" text-anchor="middle" class="sans white heavy" font-size="17">2</text>
+    <text x="370" y="1865" class="sans white bold" font-size="17">下一步验证</text>
+    <text x="370" y="1892" class="sans" fill="#AFC9D9" font-size="13">多 Agent 扩展 + 安全鉴权</text>
+    <path d="M538 1872H576" stroke="#54CED1" stroke-width="3" marker-end="url(#arrowTeal)"/>
+    <circle cx="610" cy="1872" r="20" fill="#E9485B"/>
+    <text x="610" y="1879" text-anchor="middle" class="sans white heavy" font-size="17">3</text>
+    <text x="644" y="1865" class="sans white bold" font-size="17">可落地交付</text>
+    <text x="644" y="1892" class="sans" fill="#AFC9D9" font-size="13">SDK / API 接入与企业场景试点</text>
+  </g>
+  <rect x="848" y="1832" width="312" height="108" rx="22" fill="#FFFFFF" stroke="#CFE2EB"/>
+  <text x="870" y="1864" class="sans ink heavy" font-size="19">合作方向</text>
+  <text x="870" y="1892" class="sans muted medium" font-size="14">• AI Agent 平台与开发工具接入</text>
+  <text x="870" y="1917" class="sans muted medium" font-size="14">• 智能穿戴设备联合验证</text>
+  <text x="870" y="1933" class="sans muted medium" font-size="14">• 企业任务监管与移动决策试点</text>
+
+</svg>
