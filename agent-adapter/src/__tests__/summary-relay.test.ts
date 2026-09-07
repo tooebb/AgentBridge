@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractLastAssistantText, parseHookInput } from '../hooks/summary-relay.js';
+import { extractLatestTurnText, parseHookInput } from '../hooks/summary-relay.js';
 
 function line(obj: unknown): string {
   return JSON.stringify(obj);
@@ -11,14 +11,14 @@ test('extracts text from last end_turn assistant', () => {
     line({ type: 'user', message: { content: [{ type: 'text', text: 'hi' }] } }),
     line({ type: 'assistant', message: { content: [{ type: 'text', text: 'done here' }], stop_reason: 'end_turn' } }),
   ].join('\n');
-  assert.equal(extractLastAssistantText(jsonl), 'done here');
+  assert.equal(extractLatestTurnText(jsonl), 'done here');
 });
 
 test('returns empty when last assistant has no text (pure tool turn)', () => {
   const jsonl = [
     line({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }], stop_reason: 'end_turn' } }),
   ].join('\n');
-  assert.equal(extractLastAssistantText(jsonl), '');
+  assert.equal(extractLatestTurnText(jsonl), '');
 });
 
 test('joins only text blocks, skipping tool_use', () => {
@@ -35,11 +35,11 @@ test('joins only text blocks, skipping tool_use', () => {
       },
     }),
   ].join('\n');
-  assert.equal(extractLastAssistantText(jsonl), 'part1\npart2');
+  assert.equal(extractLatestTurnText(jsonl), 'part1\npart2');
 });
 
 test('returns empty for empty jsonl', () => {
-  assert.equal(extractLastAssistantText(''), '');
+  assert.equal(extractLatestTurnText(''), '');
 });
 
 test('skips invalid json lines', () => {
@@ -47,15 +47,15 @@ test('skips invalid json lines', () => {
     'not json',
     line({ type: 'assistant', message: { content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' } }),
   ].join('\n');
-  assert.equal(extractLastAssistantText(jsonl), 'ok');
+  assert.equal(extractLatestTurnText(jsonl), 'ok');
 });
 
-test('skips non-end_turn assistant and finds earlier end_turn', () => {
+test('returns null when last assistant is still mid-tool (flush pending)', () => {
   const jsonl = [
     line({ type: 'assistant', message: { content: [{ type: 'text', text: 'first' }], stop_reason: 'end_turn' } }),
-    line({ type: 'assistant', message: { content: [{ type: 'text', text: 'ignored' }], stop_reason: 'tool_use' } }),
+    line({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }], stop_reason: 'tool_use' } }),
   ].join('\n');
-  assert.equal(extractLastAssistantText(jsonl), 'first');
+  assert.equal(extractLatestTurnText(jsonl), null);
 });
 
 test('parseHookInput extracts transcript_path', () => {

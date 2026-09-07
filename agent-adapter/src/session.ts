@@ -85,6 +85,7 @@ export class SessionBridge {
 
   private async forward(event: AgentEvent): Promise<void> {
     const msg = this.normalizer ? this.normalizer.fromAgentEvent(event) : eventToMessage(event, this.sessionId);
+    console.log(`[session] forward type=${event.type} -> ${msg.event_type} ts=${new Date().toISOString()} body=${JSON.stringify((msg.body ?? '').slice(0, 60))}`);
     try {
       await this.sendEvent(msg);
     } catch (err) {
@@ -97,9 +98,13 @@ export async function main(): Promise<void> {
   const serverUrl = process.env.AGENTBRIDGE_URL || 'http://localhost:8088';
   const sessionId = process.env.AGENTBRIDGE_SESSION || 'default';
   const claudePath = process.env.CLAUDE_PATH || 'claude';
+  const cwd = process.env.AGENTBRIDGE_CWD || process.cwd();
+  if (!process.env.AGENTBRIDGE_CWD) {
+    console.warn('[session] AGENTBRIDGE_CWD 未设置，落盘文件将写到当前目录；建议用 start-session.ps1 启动');
+  }
 
   const wsClient = new AgentBridgeClient({ serverUrl, sessionId });
-  const adapter = new ClaudeCodeAdapter({ claudePath, sessionId });
+  const adapter = new ClaudeCodeAdapter({ claudePath, sessionId, cwd });
   const normalizer = new EventNormalizer(sessionId, adapter.name);
   const bridge = new SessionBridge({
     adapter,

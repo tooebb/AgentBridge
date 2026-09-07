@@ -1,8 +1,11 @@
 param(
     [int]$CorePort = 8088,
     [int]$SttPort = 8790,
+    [int]$RelayPort = 8787,
+    [string]$Session = "default",
     [string]$Python = "D:\environment\Python 3.13.7\python.exe",
-    [switch]$SkipWatchdog
+    [switch]$SkipWatchdog,
+    [switch]$Relay
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,6 +47,37 @@ if ($corePid -and (Test-ProcessAlive -Pid $corePid) -and (Test-PortListening -Po
     }
 
     Write-Host "[start-core] Core: running"
+}
+
+if ($Relay) {
+    $relayPid = Read-Pid -Root $toolRoot -Name 'relay'
+    if ($relayPid -and (Test-ProcessAlive -Pid $relayPid) -and (Test-PortListening -Port $RelayPort)) {
+        Write-Host "[start-core] relay: skip (pid=$relayPid)"
+    } else {
+        if ($relayPid) {
+            Remove-Pid -Root $toolRoot -Name 'relay'
+        }
+
+        $relayScript = Join-Path $adapterDir 'dist\relay.js'
+        Start-BackgroundProcess -Root $toolRoot -Name 'relay' -FilePath 'node' `
+            -ArgumentList @($relayScript) -WorkingDirectory $adapterDir `
+            -Env @{
+                AGENTBRIDGE_URL     = "http://localhost:$CorePort"
+                AGENTBRIDGE_SESSION = $Session
+                RELAY_PORT          = "$RelayPort"
+            } `
+            -LogFile (Join-Path $toolRoot 'logs\relay.log') | Out-Null
+
+        if (-not (Wait-Port -Port $RelayPort -TimeoutSec 10 -IntervalSec 1)) {
+            Get-Content (Join-Path $toolRoot 'logs\relay.log') -Tail 40 -ErrorAction SilentlyContinue
+            Get-Content (Join-Path $toolRoot 'logs\relay.log.err') -Tail 40 -ErrorAction SilentlyContinue
+            throw "relay unhealthy on :$RelayPort"
+        }
+
+        Write-Host "[start-core] relay: running"
+    }
+} else {
+    Write-Host "[start-core] relay: disabled (mirror line off; pass -Relay to enable)"
 }
 
 $sttPid = Read-Pid -Root $toolRoot -Name 'stt'

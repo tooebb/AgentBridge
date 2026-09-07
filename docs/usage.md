@@ -27,10 +27,19 @@
 
 ## 二、出门接力（PC → 眼镜）
 
+> **零记忆**：不需要手动 `claude -r`，也不用记 session id——脚本靠落盘文件 `.agentbridge-current-session` 记住会话。
+
 1. PC 终端 Ctrl+C 停掉 `claude`（释放会话 `.jsonl` 锁）
 2. 确认 Core 还在：`netstat -ano | findstr :8088`
-3. 项目根跑：`.\scripts\start-session.ps1` → 自动 resume 落盘会话，前台跑 session.js
+3. 项目根跑：`.\scripts\start-session.ps1 -Cwd <项目目录>` → 读落盘文件 resume 同一个会话，前台跑 session.js
 4. 眼镜连上即可继续
+
+> **第一次接力（落盘文件还没生成）**：脚本会回退到「该目录 mtime 最新的会话」。此时本目录会话多（尤其若还并行跑着 Claude Code 助手），可能选错。第一次请显式钉一次，之后落盘文件生成就零记忆了：
+>
+> ```powershell
+> # 在 claude 里敲 /status 拿到 session id，然后：
+> .\scripts\start-session.ps1 -Cwd <项目目录> -ResumeSession <id>
+> ```
 
 ## 三、回家接力（眼镜 → PC）
 
@@ -57,6 +66,8 @@ Core/STT/watchdog 不动，只切 session.js 的项目 cwd。
 ## 关键约束（踩过的坑）
 
 - **接力是顺序的，不是并发的**：同一会话 `.jsonl` 不能被两个进程同时写，切换前先停掉 hold 会话的进程
+- **零记忆机制**：`start-session.ps1` / `resume-glasses.ps1` 都靠 `.agentbridge-current-session` 落盘文件（daemon 每次 resume 时写入活跃 session id）。落盘文件存在后，`start-session.ps1 -Cwd <dir>` 固定 resume 它、不再 mtime 猜；只有**第一次冷启动**（文件不存在）才 mtime 兜底，此时若本目录并行跑着 Claude Code 助手会选错——第一次请 `-ResumeSession <id>` 显式钉一次
+- **不要手动 `claude -r` 出门接力**：`claude -r` 只在你 PC 终端打开交互会话，既不通知眼镜 daemon、还会双进程抢同一 `.jsonl`。它只在回家接力里由 `resume-glasses.ps1` 内部自动执行
 - 两个脚本 + `.agentbridge-current-session` 都在**项目根**，不在 agent-adapter
 - `start-session.ps1` 跑完提示符留在 agent-adapter，回家接力前先 `cd ..`
 - Core 是常驻服务，跟窗口无关；判断标准是 `netstat -ano | findstr :8088`

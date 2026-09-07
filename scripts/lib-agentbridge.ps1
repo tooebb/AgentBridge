@@ -100,6 +100,24 @@ function Wait-Health {
     return $false
 }
 
+function Wait-Port {
+    param(
+        [int]$Port,
+        [int]$TimeoutSec = 10,
+        [int]$IntervalSec = 1
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-PortListening -Port $Port) {
+            return $true
+        }
+        Start-Sleep -Seconds $IntervalSec
+    }
+
+    return $false
+}
+
 function Get-AgentBridgeEnv {
     param(
         [string]$Cwd,
@@ -123,6 +141,43 @@ function Get-AgentBridgeEnv {
     }
 
     return $env
+}
+
+function Pick-Session {
+    param([string]$Cwd)
+
+    $encoded = $Cwd -replace '[^a-zA-Z0-9-]', '-'
+    $projDir = Join-Path $env:USERPROFILE ".claude\projects\$encoded"
+    if (-not (Test-Path $projDir)) {
+        Write-Host "[pick] no sessions dir: $projDir"
+        return ""
+    }
+
+    $sessions = @(Get-ChildItem "$projDir\*.jsonl" | Sort-Object LastWriteTime -Descending | Select-Object -First 10)
+    if ($sessions.Count -eq 0) {
+        Write-Host "[pick] no sessions under $projDir"
+        return ""
+    }
+
+    Write-Host "[pick] recent sessions (pick index, Enter=latest):"
+    for ($i = 0; $i -lt $sessions.Count; $i++) {
+        $s = $sessions[$i]
+        $sizeKB = [math]::Round($s.Length / 1KB, 1)
+        $time = $s.LastWriteTime.ToString('yyyy-MM-dd HH:mm')
+        $id = $s.BaseName
+        Write-Host ("  [{0}] {1}  {2,8} KB  {3}" -f $i, $time, $sizeKB, $id)
+    }
+
+    $choice = Read-Host "pick index"
+    $idx = 0
+    if ($choice -match '^\d+$') {
+        $idx = [int]$choice
+    }
+    if ($idx -lt 0 -or $idx -ge $sessions.Count) {
+        Write-Host "[pick] invalid index, fallback to latest"
+        $idx = 0
+    }
+    return $sessions[$idx].BaseName
 }
 
 function Start-BackgroundProcess {

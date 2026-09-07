@@ -7,18 +7,25 @@ param(
     [string]$Python = "D:\environment\Python 3.13.7\python.exe",
     [int]$CorePort = 8088,
     [int]$SttPort = 8790,
-    [switch]$SkipWatchdog
+    [int]$RelayPort = 8787,
+    [switch]$SkipWatchdog,
+    [switch]$Relay
 )
 
 $ErrorActionPreference = "Stop"
 
 $coreParams = @{
-    CorePort = $CorePort
-    SttPort  = $SttPort
-    Python   = $Python
+    CorePort  = $CorePort
+    SttPort   = $SttPort
+    RelayPort = $RelayPort
+    Session   = $Session
+    Python    = $Python
 }
 if ($SkipWatchdog) {
     $coreParams['SkipWatchdog'] = $true
+}
+if ($Relay) {
+    $coreParams['Relay'] = $true
 }
 
 & "$PSScriptRoot\start-core.ps1" @coreParams

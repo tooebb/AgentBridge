@@ -11,7 +11,11 @@ interface AssistantEvent {
   stop_reason?: string;
 }
 
-export function extractLastAssistantText(jsonl: string): string {
+// Returns the text of the most recent assistant message, or null when that
+// message is still mid-tool (its terminal end_turn message has not been
+// flushed to the transcript yet). An empty string means the turn ended with
+// no text block, so there is nothing to relay.
+export function extractLatestTurnText(jsonl: string): string | null {
   const lines = jsonl.split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
@@ -24,13 +28,11 @@ export function extractLastAssistantText(jsonl: string): string {
     }
     if (entry.type !== 'assistant') continue;
     const msg = entry.message ?? entry;
-    if (msg.stop_reason !== 'end_turn') continue;
-    const text = (msg.content ?? [])
+    if (msg.stop_reason === 'tool_use') return null;
+    return (msg.content ?? [])
       .filter((b) => b.type === 'text' && typeof b.text === 'string')
       .map((b) => b.text as string)
       .join('\n');
-    if (text) return text;
-    return '';
   }
   return '';
 }
@@ -52,18 +54,28 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+const FLUSH_POLL_INTERVAL_MS = 250;
+const FLUSH_POLL_MAX_ATTEMPTS = 20;
+
 async function main(): Promise<void> {
   const input = parseHookInput(await readStdin());
   if (!input.transcriptPath) return;
 
-  let jsonl: string;
-  try {
-    jsonl = await readFile(input.transcriptPath, 'utf8');
-  } catch {
-    return;
+  // The Stop hook can fire before the final assistant message is flushed to
+  // the transcript. Poll until the terminal message appears so this turn's
+  // text is captured now instead of being deferred to the next turn's hook.
+  let text: string | null = null;
+  for (let attempt = 0; attempt < FLUSH_POLL_MAX_ATTEMPTS; attempt++) {
+    try {
+      text = extractLatestTurnText(await readFile(input.transcriptPath, 'utf8'));
+    } catch {
+      return;
+    }
+    if (text !== null) break;
+    if (attempt < FLUSH_POLL_MAX_ATTEMPTS - 1) {
+      await new Promise((resolve) => setTimeout(resolve, FLUSH_POLL_INTERVAL_MS));
+    }
   }
-
-  const text = extractLastAssistantText(jsonl);
   if (!text) return;
 
   const relayUrl = process.env.AGENTBRIDGE_RELAY_URL || 'http://127.0.0.1:8787';

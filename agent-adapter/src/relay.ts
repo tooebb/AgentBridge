@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { EventNormalizer } from './normalizer.js';
 import { AgentBridgeClient } from './ws-client.js';
-import { summarize as defaultSummarize } from './summarize.js';
 import type { AgentEvent } from './adapters/types.js';
 import type { UnifiedMessage } from './types.js';
 
@@ -35,6 +34,10 @@ interface PendingApproval {
   timer: NodeJS.Timeout | null;
 }
 
+async function truncateForCard(text: string, maxLen = 200): Promise<string> {
+  return text.length <= maxLen ? text : text.slice(0, maxLen) + '…';
+}
+
 export class ApprovalRelay {
   private readonly sendEvent: (msg: UnifiedMessage) => Promise<void>;
   private readonly normalizer: EventNormalizer;
@@ -47,7 +50,7 @@ export class ApprovalRelay {
     this.sendEvent = options.sendEvent;
     this.normalizer = new EventNormalizer(options.sessionId, options.agentId ?? 'claude-code');
     this.timeoutMs = options.timeoutMs ?? 120_000;
-    this.summarize = options.summarize ?? defaultSummarize;
+    this.summarize = options.summarize ?? truncateForCard;
   }
 
   requestApproval(req: ApprovalRequest): Promise<Decision> {
@@ -93,11 +96,16 @@ export class ApprovalRelay {
 
   async handleSummaryText(text: string): Promise<void> {
     const hash = createHash('sha256').update(text).digest('hex');
-    if (hash === this.lastSummaryHash) return;
+    if (hash === this.lastSummaryHash) {
+      console.log(`[relay] summary dedup skipped ${new Date().toISOString()} len=${text.length}`);
+      return;
+    }
     this.lastSummaryHash = hash;
+    console.log(`[relay] summary received ${new Date().toISOString()} len=${text.length} text=${JSON.stringify(text.slice(0, 80))}`);
     const summary = await this.summarize(text);
     const msg = this.normalizer.fromAgentEvent({ type: 'done', text: summary });
     await this.sendEvent(msg);
+    console.log(`[relay] summary sent ${new Date().toISOString()} card=${JSON.stringify(summary.slice(0, 80))}`);
   }
 }
 

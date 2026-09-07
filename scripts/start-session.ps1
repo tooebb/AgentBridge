@@ -6,12 +6,14 @@
 #   .\scripts\start-session.ps1                          # resume last recorded session (or latest in cwd)
 #   .\scripts\start-session.ps1 -Cwd D:\path\to\proj     # point at a specific project dir
 #   .\scripts\start-session.ps1 -Cwd D:\path\to\empty    # start a fresh conversation
+#   .\scripts\start-session.ps1 -Pick                    # list recent sessions, pick by number
 #   .\scripts\start-session.ps1 -ResumeSession <id>      # pin an explicit session id
 #
 # Note: -ResumeSession is optional. When omitted, the daemon resumes the session
 # recorded in <Cwd>\.agentbridge-current-session (written by the adapter each time
 # it resumes), falling back to the most recently modified project session — the
-# "出门接力" mode. Pass -ResumeSession <id> to pin a specific session.
+# "出门接力" mode. Pass -ResumeSession <id> to pin a specific session, or -Pick to
+# choose interactively from the recent sessions (no UUID typing).
 
 param(
   [string]$Cwd = (Get-Location).Path,
@@ -19,7 +21,8 @@ param(
   [string]$Url = "http://localhost:8088",
   [string]$Session = "default",
   [int]$AudioPort = 8788,
-  [string]$Python = "D:\environment\Python 3.13.7\python.exe"
+  [string]$Python = "D:\environment\Python 3.13.7\python.exe",
+  [switch]$Pick
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +33,10 @@ $ErrorActionPreference = "Stop"
 $sessionFile = Join-Path $Cwd ".agentbridge-current-session"
 if ($ResumeSession -eq "" -and (Test-Path $sessionFile)) {
   $ResumeSession = (Get-Content $sessionFile -Raw).Trim()
+}
+
+if ($ResumeSession -eq "" -and $Pick) {
+  $ResumeSession = Pick-Session -Cwd $Cwd
 }
 
 $adapterDir = Join-Path (Resolve-ToolRoot) 'agent-adapter'

@@ -2,7 +2,7 @@ $ErrorActionPreference = "Continue"
 . "$PSScriptRoot\lib-agentbridge.ps1"
 
 $toolRoot = Resolve-ToolRoot
-$order = @('watchdog', 'stt', 'core')
+$order = @('watchdog', 'stt', 'relay', 'core')
 
 foreach ($name in $order) {
     $pidValue = Read-Pid -Root $toolRoot -Name $name

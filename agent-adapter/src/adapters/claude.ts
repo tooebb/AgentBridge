@@ -139,6 +139,9 @@ export class ClaudeCodeAdapter extends EventEmitter implements AgentAdapter {
               if (event.type === 'text') {
                 this.lastAssistantText = event.content;
               }
+              if (event.type === 'task_completed' || event.type === 'task_failed') {
+                console.log(`[claude] result ts=${new Date().toISOString()} type=${event.type} body=${JSON.stringify((('summary' in event ? event.summary : 'error' in event ? event.error : '') ?? '').slice(0, 80))}`);
+              }
               push(event);
             }
           }
