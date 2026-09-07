@@ -9,7 +9,8 @@ param(
     [int]$SttPort = 8790,
     [int]$RelayPort = 8787,
     [switch]$SkipWatchdog,
-    [switch]$Relay
+    [switch]$Relay,
+    [switch]$Pick
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,4 +30,4 @@ if ($Relay) {
 }
 
 & "$PSScriptRoot\start-core.ps1" @coreParams
-& "$PSScriptRoot\start-session.ps1" -Cwd $Cwd -ResumeSession $ResumeSession -Url $Url -Session $Session -AudioPort $AudioPort -Python $Python
+& "$PSScriptRoot\start-session.ps1" -Cwd $Cwd -ResumeSession $ResumeSession -Url $Url -Session $Session -AudioPort $AudioPort -Python $Python -Pick:$Pick

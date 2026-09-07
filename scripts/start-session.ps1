@@ -28,15 +28,17 @@ param(
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\lib-agentbridge.ps1"
 
-# If no explicit session is pinned, resume the session the daemon last
-# recorded (written to .agentbridge-current-session by the adapter on resume).
+# -Pick overrides the persisted "last session" file, otherwise the only way
+# to switch sessions is hand-typing a UUID.
+if ($ResumeSession -eq "" -and $Pick) {
+  $ResumeSession = Pick-Session -Cwd $Cwd
+}
+
+# Otherwise resume the session the daemon last recorded (written to
+# .agentbridge-current-session by the adapter on resume).
 $sessionFile = Join-Path $Cwd ".agentbridge-current-session"
 if ($ResumeSession -eq "" -and (Test-Path $sessionFile)) {
   $ResumeSession = (Get-Content $sessionFile -Raw).Trim()
-}
-
-if ($ResumeSession -eq "" -and $Pick) {
-  $ResumeSession = Pick-Session -Cwd $Cwd
 }
 
 $adapterDir = Join-Path (Resolve-ToolRoot) 'agent-adapter'
