@@ -19,8 +19,11 @@ var validTransitions = map[domain.TaskState]map[domain.EventType]domain.TaskStat
 		domain.EventTaskStarted: domain.TaskStateStarting,
 	},
 	domain.TaskStateStarting: {
-		domain.EventTaskRunning: domain.TaskStateRunning,
-		domain.EventTaskFailed:  domain.TaskStateFailed,
+		domain.EventTaskRunning:   domain.TaskStateRunning,
+		domain.EventTaskBlocked:   domain.TaskStateBlocked,
+		domain.EventNeedsApproval: domain.TaskStateAwaitingApproval,
+		domain.EventTaskFailed:    domain.TaskStateFailed,
+		domain.EventTaskCompleted: domain.TaskStateCompleted,
 	},
 	domain.TaskStateRunning: {
 		domain.EventTaskRunning:   domain.TaskStateRunning,

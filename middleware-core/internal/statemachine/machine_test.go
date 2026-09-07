@@ -38,6 +38,17 @@ func TestTransitionRestartsFailedTaskID(t *testing.T) {
 	mustTransition(t, machine, taskID, sessionID, domain.EventTaskStarted, domain.TaskStateStarting)
 }
 
+func TestTransitionNeedsApprovalDirectlyAfterStarted(t *testing.T) {
+	machine := New()
+	taskID := "default"
+	sessionID := "session-1"
+
+	// The Claude SDK can request tool approval immediately after task start,
+	// before emitting any assistant text (no task_running in between).
+	mustTransition(t, machine, taskID, sessionID, domain.EventTaskStarted, domain.TaskStateStarting)
+	mustTransition(t, machine, taskID, sessionID, domain.EventNeedsApproval, domain.TaskStateAwaitingApproval)
+}
+
 func mustTransition(t *testing.T, machine *Machine, taskID, sessionID string, event domain.EventType, want domain.TaskState) {
 	t.Helper()
 
