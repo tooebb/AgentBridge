@@ -17,10 +17,9 @@
 | v16 | 删除编号卡尺寸文字，完成规范审查 | `OPC-22-AgentBridge-poster-v16.zip` |
 | v17 | 扩充项目背景，新增RGB主稿与通用CMYK备选 | `OPC-22-AgentBridge-poster-v17-RGB.zip`、`OPC-22-AgentBridge-poster-v17-CMYK-backup.zip` |
 | v18 | 融合v4的斜切编号区、科技背景和视觉节奏，同时保留v17内容 | `OPC-22-AgentBridge-poster-v18-RGB.zip`、`OPC-22-AgentBridge-poster-v18-CMYK-backup.zip` |
-| v19 | 将Solution五张信息卡升级为眼镜、语音、核心、电脑和眼镜界面的产品化视觉链路 | `OPC-22-AgentBridge-poster-v19-RGB.zip`、`OPC-22-AgentBridge-poster-v19-CMYK-backup.zip` |
 
 ## 当前推荐
 
-- 产品形象与屏幕审阅：v19 RGB；
-- 通用印前参考：v19 CMYK；
-- 稳妥回退点：v18 RGB（视觉融合版）或v17 RGB（内容稳定版）。
+- 内容与屏幕审阅：v18 RGB；
+- 通用印前参考：v18 CMYK；
+- 最稳妥的旧版回退点：v17 RGB。
