@@ -6,10 +6,10 @@
 
 ### 模式 A：ADB Reverse Tunnel（开发阶段，推荐）
 
-手机通过 USB 连接 PC，ADB 将手机 19090 端口转发到 PC 8080：
+手机通过 USB 连接 PC，ADB 将手机 19090 端口转发到 PC 8088：
 
 ```bash
-adb reverse tcp:19090 tcp:8080
+adb reverse tcp:19090 tcp:8088
 ```
 
 眼镜端使用 `ws://127.0.0.1:19090` 连接 Core（CustomApp 运行在手机 Android 系统上，走手机的 TCP 栈）。
@@ -30,13 +30,15 @@ const val DEFAULT_SERVER_URL = "ws://127.0.0.1:19090"
 Core 监听所有网卡，眼镜端使用 Core 电脑的局域网 IP：
 
 ```bash
-AGENTBRIDGE_ADDR=0.0.0.0:8080 AGENTBRIDGE_EVENT_DB=/tmp/agentbridge-w3.db go run ./cmd/server
+AGENTBRIDGE_ADDR=0.0.0.0:8088 AGENTBRIDGE_EVENT_DB=/tmp/agentbridge-w3.db go run ./cmd/server
 ```
 
 修改 `AgentBridgeClient.kt`：
 ```kotlin
-const val DEFAULT_SERVER_URL = "ws://192.168.31.208:8080"
+const val DEFAULT_SERVER_URL = "ws://192.168.31.208:8088"
 ```
+
+> ⚠️ 2026-08-19 起 mDNS 自动发现已取代硬编码局域网 IP：**不要硬编码 PC IP**（DHCP 会漂移，且此 ROM 封禁 `run-as`，手动 IP 无法配置）。当前首选的眼镜连接方式见根目录 `CLAUDE.md` 的「眼镜连接模式」节。
 
 ## 2. 眼镜端地址配置
 

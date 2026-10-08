@@ -81,6 +81,7 @@ Core/STT/watchdog 不动，只切 session.js 的项目 cwd。
 | 场景 | 手势 |
 |------|------|
 | 无任务时开始/停止录音 | 单击 |
+| 识别中放弃本句（作废，不送 Claude） | 双击 |
 | 审批卡 approve | 单击 |
 | 审批卡 reject | 双击 |
 | 展开详情 | 滑动（view_details） |

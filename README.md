@@ -122,14 +122,14 @@ agentbridge/
 ```bash
 cd middleware-core
 go mod tidy
-go run cmd/server/main.go
-# 监听 :8080，输出 "Server starting on :8080"
+AGENTBRIDGE_ADDR=:8088 go run cmd/server/main.go
+# 监听 :8088（本项目统一端口；裸跑不带 env 时代码回退 :8080）
 ```
 
 可选环境变量：
 
 ```bash
-AGENTBRIDGE_ADDR=127.0.0.1:18080              # 覆盖默认监听地址 :8080
+AGENTBRIDGE_ADDR=127.0.0.1:18080              # 覆盖默认监听地址（代码默认 :8080；本项目脚本统一 :8088）
 AGENTBRIDGE_EVENT_DB=/tmp/agentbridge.db      # 启用 SQLite 事件持久化和重连补发
 ```
 
@@ -184,13 +184,13 @@ npm run dev
 
 ```bash
 # 查看 Core 健康状态
-curl http://localhost:8080/health
+curl http://localhost:8088/health
 
 # 查看所有 session
-curl http://localhost:8080/api/v1/sessions
+curl http://localhost:8088/api/v1/sessions
 
 # 查看某 session 事件历史
-curl http://localhost:8080/api/v1/events/{session_id}
+curl http://localhost:8088/api/v1/events/{session_id}
 
 # 验证 Phone/Glass 客户端 ack、去重和动作回传状态层
 cd mock-device
@@ -279,7 +279,7 @@ npm run glass
 ```bash
 # 先启动 Core，再运行
 cd mock-device
-SERVER=http://127.0.0.1:8080 npm run test:w3
+SERVER=http://127.0.0.1:8088 npm run test:w3
 ```
 
 该脚本模拟 `ar_glasses` 客户端，验证眼镜端审批消息、TTS/屏显 overrides、按键/语音 approve 回传、`agent_adapter` relay、以及断连重连后的 `last_acked_seq` 补发。完整实机验收清单见 `docs/w3-integration-checklist.md`。
@@ -288,7 +288,7 @@ SERVER=http://127.0.0.1:8080 npm run test:w3
 
 ```bash
 cd mock-device
-SERVER=http://127.0.0.1:8080 npm run w3:preflight
+SERVER=http://127.0.0.1:8088 npm run w3:preflight
 ```
 
 预检会串联 Node/依赖/Core health/模拟 W3 readiness，并检查当前主机是否能通过 `adb devices` 看到设备。仓库自测模式下没有 `adb` 或没有设备只会提示 WARN；现场联调时使用 `W3_REQUIRE_DEVICE=1`，看不到 `state=device` 的 W3/手机设备会直接失败。

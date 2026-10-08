@@ -454,7 +454,7 @@ Phone ← CXR-L SDK → Glass（仅生命周期：appUploadAndInstall + appStart
 
 ### 12.5 开发阶段连接配置
 
-开发阶段眼镜端硬编码 Core 地址（`ws://<PC-LAN-IP>:8080`），后续可改为：
+开发阶段眼镜端硬编码 Core 地址（`ws://<PC-LAN-IP>:8088`），后续可改为：
 - ADB 传参：`adb shell am start -e server "ws://..." -e session "demo-123"`
 - 配置文件：SharedPreferences 通过 ADB 预置
 - 设备发现：从 Core REST API 拉取活跃 session 列表
@@ -539,8 +539,8 @@ agentbridge/
 
 1. **Core 验证**：`cd middleware-core && go test ./...`
 2. **Mock Device 验证**：先启动 Core，再执行 `cd mock-device && npm run test:e2e`
-3. **W3 模拟验证**：先启动 Core，再执行 `cd mock-device && SERVER=http://127.0.0.1:8080 npm run test:w3`
-4. **W3 主机预检**：真实联调前执行 `cd mock-device && SERVER=http://127.0.0.1:8080 npm run w3:preflight`；现场要求真机时增加 `W3_REQUIRE_DEVICE=1`
+3. **W3 模拟验证**：先启动 Core，再执行 `cd mock-device && SERVER=http://127.0.0.1:8088 npm run test:w3`
+4. **W3 主机预检**：真实联调前执行 `cd mock-device && SERVER=http://127.0.0.1:8088 npm run w3:preflight`；现场要求真机时增加 `W3_REQUIRE_DEVICE=1`
 5. **风险拦截验证**：Agent 尝试执行 `rm -rf` → 手机/眼镜显示「返回 PC 确认」，按钮不可点击
 6. **Dashboard 验证**：Dashboard 实时展示 session 事件流、状态变迁时序图、审批历史
 

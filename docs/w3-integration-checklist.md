@@ -5,10 +5,12 @@
 ## 1. 前置环境
 
 - Core 使用可持久化配置启动：`AGENTBRIDGE_EVENT_DB=/path/to/events.db`。
-- Core 监听地址对眼镜端可访问：本机调试可用 `AGENTBRIDGE_ADDR=0.0.0.0:8080`。
+- Core 监听地址对眼镜端可访问：本机调试可用 `AGENTBRIDGE_ADDR=0.0.0.0:8088`。
 - Agent Adapter 已连接同一个 session，并优先使用可用 provider；没有 `ANTHROPIC_API_KEY` 时确认 `generic-cli`、OpenAI-compatible 或 `claude-cli` fallback 可用。
 - W3 端能访问：`ws://<core-host>/ws/<session_id>?device_type=ar_glasses&last_acked_seq=<seq>`。
-- 眼镜端样例工程使用 `rokid-sdk/cxrssample/cxrswithcxrl/app/src/main/java/com/rokid/cxrswithcxrl/agent/AgentBridgeClient.kt` 中的 `DEFAULT_SERVER_URL` 和 `DEFAULT_SESSION_ID`。开发阶段默认值为 `ws://127.0.0.1:19090`（ADB reverse tunnel），部署阶段改为 Core 机器的局域网 IP (`ws://<PC-IP>:8080`)。
+- 眼镜端样例工程使用 `rokid-sdk/cxrssample/cxrswithcxrl/app/src/main/java/com/rokid/cxrswithcxrl/agent/AgentBridgeClient.kt` 中的 `DEFAULT_SERVER_URL` 和 `DEFAULT_SESSION_ID`。开发阶段默认值为 `ws://127.0.0.1:19090`（ADB reverse tunnel），部署阶段改为 Core 机器的局域网 IP (`ws://<PC-IP>:8088`)。
+
+> ⚠️ 本文档描述 Phase 2 时期的连接方式与端口，部分内容已被 mDNS 自动发现（2026-08-19）取代。当前权威的连接模式与启动方式见根目录 `CLAUDE.md`。
 
 ## 2. 自动前置检查
 
@@ -16,7 +18,7 @@
 
 ```bash
 cd mock-device
-SERVER=http://127.0.0.1:8080 npm run test:w3
+SERVER=http://127.0.0.1:8088 npm run test:w3
 ```
 
 该检查会模拟 ar_glasses 设备，覆盖：
@@ -31,13 +33,13 @@ SERVER=http://127.0.0.1:8080 npm run test:w3
 
 ```bash
 cd mock-device
-SERVER=http://127.0.0.1:8080 npm run w3:preflight
+SERVER=http://127.0.0.1:8088 npm run w3:preflight
 ```
 
 该预检会检查 Node.js、mock-device 依赖、Core `/health`、模拟 W3 readiness，以及当前主机是否能通过 `adb devices` 看到设备。默认仓库自测模式下，未安装 `adb` 或未连接设备只会给出 WARN；现场真实联调时使用：
 
 ```bash
-W3_REQUIRE_DEVICE=1 SERVER=http://127.0.0.1:8080 npm run w3:preflight
+W3_REQUIRE_DEVICE=1 SERVER=http://127.0.0.1:8088 npm run w3:preflight
 ```
 
 此时如果主机看不到 `state=device` 的 W3/手机设备，预检会失败并提示需要现场接入设备。
@@ -86,7 +88,7 @@ W3_REQUIRE_DEVICE=1 SERVER=http://127.0.0.1:8080 npm run w3:preflight
 ```bash
 # Core
 cd middleware-core
-AGENTBRIDGE_ADDR=0.0.0.0:8080 AGENTBRIDGE_EVENT_DB=/tmp/agentbridge-w3.db go run ./cmd/server
+AGENTBRIDGE_ADDR=0.0.0.0:8088 AGENTBRIDGE_EVENT_DB=/tmp/agentbridge-w3.db go run ./cmd/server
 
 # Agent Adapter
 cd agent-adapter
@@ -97,7 +99,7 @@ npm run dev
 
 # 本地模拟 W3
 cd mock-device
-SERVER=http://127.0.0.1:8080 npm run glass
+SERVER=http://127.0.0.1:8088 npm run glass
 
 # 眼镜端 APK
 cd rokid-sdk/cxrssample/cxrswithcxrl

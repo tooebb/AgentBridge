@@ -5,8 +5,8 @@ AI Agent 跨设备交互中间层。结构化 Agent 输出 → 分发到手机/�
 ## 怎么跑
 
 ```bash
-# Core (Golang, :8080)
-cd middleware-core && go run cmd/server/main.go
+# Core (Golang, :8088 —— 脚本统一端口；裸跑不带 env 时代码回退 :8080)
+cd middleware-core && AGENTBRIDGE_ADDR=:8088 go run cmd/server/main.go
 
 # Dashboard (React, :5173)
 cd dashboard && npm install && npm run dev
