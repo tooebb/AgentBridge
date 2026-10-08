@@ -213,13 +213,15 @@ npm run test:e2e
 - `agent/CardRenderer.kt`：Compose 状态卡片、审批卡片和调试状态行。
 - `activities/main/MainViewModel.kt` / `MainActivity.kt`：WS 生命周期、ADB TCP probe、CXR bridge。
 
-**连接模式（2026-08-11 更新）：**
+**连接模式（2026-08-19 更新）：**
 
-日常使用 LAN 直连（眼镜 WiFi → PC Core），ADB 仅在眼镜重启后开 WiFi 时用一次。
+日常使用 **mDNS 服务发现**：Core 启动时广播 `_agentbridge._tcp`，眼镜经 `NsdManager` 自动发现 Core 地址，按 mDNS → 手动 IP → ADB 隧道降级链连接；Core 换址或 IP 漂移时自动重新发现。
+
+> 不要硬编码 PC IP —— DHCP 会漂移，硬编码必失效（踩坑记录见 CLAUDE.md「眼镜连接模式」）。
 
 ```bash
-# LAN 直连（日常使用，全程无线）
-# 眼镜 App 连接 ws://192.168.31.209:8088
+# mDNS 自动发现（日常使用，全程无线，无需配置 IP）
+# 眼镜 App 自动发现 Core 地址
 
 # ADB 反向隧道（开发阶段 fallback，仅需一次 USB 开 WiFi）
 adb reverse tcp:19090 tcp:8088
@@ -334,17 +336,20 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 - **中风险** (0.3–0.7)：需确认审批
 - **高风险** (≥0.7 或 blockOnMobile)：仅可在 PC 端审批
 
-## 当前状态 (2026-08-11)
+## 当前状态 (2026-10-08)
+
+> **权威入口为 [CLAUDE.md](CLAUDE.md)**，本章节仅为概览，进度以 CLAUDE.md 为准。
 
 | 模块 | 状态 | 说明 |
 |------|------|------|
-| Middleware Core | ✅ 已实现 | REST/WS 端点、状态机、风控、审批、通知策略、设备分发、Dashboard 广播、事件历史 |
+| Middleware Core | ✅ 已实现 | REST/WS 端点、状态机、风控、审批、通知策略、设备分发、Dashboard 广播、事件历史、mDNS 服务广播 |
 | Event Store | ✅ 已实现 | 默认内存环形缓冲；`AGENTBRIDGE_EVENT_DB` 启用 SQLite 持久化、`seq`、`last_acked_seq` 和重连补发 |
-| Agent Adapter | ✅ 已实现 | `claude-api` / `openai-compatible` / `generic-cli` / `claude-cli` provider 选择，设备动作 relay |
+| Agent Adapter | ✅ 已实现 | `claude-api` / `openai-compatible` / `generic-cli` / `claude-cli` provider 选择，设备动作 relay；Claude Code 真实会话适配（自动镜像 + 会话接力） |
 | Web Dashboard | ✅ 已实现 | session 列表、历史事件、实时事件流 |
 | Mock Device Client | ✅ 已实现 | phone/watch/glass/earbuds 四端模拟；ack、replay、action 回传 |
-| Glass App (cxrswithcxrl) | ✅ 12 场景全部通过 | Phase 2 真机验证：WS 连接、3 种卡片、单击/双击/滑动、断连重连、卡片保护、E2E relay、approve→execute、reject、Core 重启恢复 |
+| Glass App (cxrswithcxrl) | ✅ 真机验证 | WS 连接 + mDNS 自动发现、3 种卡片、单击/双击/滑动、断连重连、approve→execute、reject、Core 重启恢复、语音输入与取消 |
 | Phone App (CXRLSample) | 最小化 | CXR-L SDK 仅用于 CustomApp install/start 生命周期 |
+| Phone Relay | ✅ 真机连通 | 手机中继 App：mDNS 广播 + TCP 透传，用于跨网络（Tailscale）场景 |
 | 认证/安全 | 待开发 | 当前未实现 API key/JWT/设备授权 |
 
 ### Phase 路线
@@ -353,19 +358,23 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 |-------|------|------|
 | Phase 1 | PC only (Core + Adapter + Dashboard + Mock Device) | ✅ 完成 |
 | Phase 2 | 真机联调 / 端到端闭环（眼镜 12 场景） | ✅ 完成 (2026-08-11) |
-| Phase 3a | Claude Code CLI Adapter V2 (真实 Agent 审批闭环) | 📋 Spec + Plan 已完成，待开发 |
+| Phase 3a | 真实本地 Agent 会话适配（Claude Code CLI 自动镜像 + 会话接力） | ✅ 完成 (2026-08-14) — 真机 E2E 四场景通过 |
 | Phase 3b | 多 Agent 扩展 (Codex, GenericTerminalAdapter) | 🔜 规划中 |
 | Phase 3c | 开源化 (SDK, 协议文档) | 🔜 规划中 |
 
-### 眼镜 WiFi 发现与 LAN 直连 (2026-08-11)
+### 眼镜连接与 mDNS 服务发现 (2026-08-19)
 
-眼镜有完整 WiFi 6 硬件（Qualcomm kiwi_v2, wlan0），连接模式从 ADB 反向隧道改为 LAN 直连：
-- **日常使用：** 眼镜 WiFi → LAN → Core (`ws://192.168.31.209:8088`)，全程无线
-- **WiFiLock：** App 启动时申请 `WIFI_MODE_FULL_HIGH_PERF`，熄屏不掉 WiFi
+眼镜有完整 WiFi 6 硬件（Qualcomm kiwi_v2, wlan0）。连接方式已从「手动填 PC IP 的 LAN 直连」演进为 **mDNS 自动发现**：
+
+- **mDNS 自动发现：** Core 启动时广播 `_agentbridge._tcp`；眼镜经 `NsdManager` 发现 Core，按 mDNS → 手动 IP → ADB 隧道降级链连接
+- **运行中重发现：** Core 换址 / IP 漂移导致旧地址失效，连续重连失败超 60s 触发重新发现并恢复；同端口重启（<60s）仍走快重连（2s→30s 退避）
+- **WiFiLock：** App 申请 `WIFI_MODE_FULL_HIGH_PERF`，熄屏不掉 WiFi
 - **眼镜重启后：** 需一次 ADB USB 开启 WiFi（已自动化：`scripts/tunnel-watchdog.ps1` + `scripts/deploy-apk.ps1`）
 - **ADB 与 WiFi 独立：** ADB 断连不影响数据通道
 
-详见 CLAUDE.md「眼镜 WiFi 发现与 LAN 直连」章节。
+> 历史方案「LAN 直连 + 手动填 PC IP」已弃用：DHCP 会漂移，硬编码 IP 必失效。
+
+详见 CLAUDE.md「眼镜连接模式（有线 ADB / 无线 LAN / mDNS）」章节。
 
 ### CXR-L SDK 联调（设备：华为 NOP_AN00 + Rokid RG-glasses）
 
@@ -385,8 +394,8 @@ IDLE → STARTING → RUNNING ⇄ BLOCKED
 - CXR 负责：应用安装与启动（已确认可用）
 - WebSocket 负责：Core ↔ 眼镜所有数据通信
 - 协议：标准 JSON，与 Dashboard / Mock Device 同一套
-- 开发阶段：ADB reverse tunnel (`ws://127.0.0.1:19090` → PC `:8080`)
-- 部署阶段：眼镜直连 Core LAN IP (`ws://<PC-IP>:8080/ws/{sessionID}?device_type=ar_glasses`)
+- 开发阶段：ADB reverse tunnel (`ws://127.0.0.1:19090` → PC `:8088`)
+- 部署阶段：眼镜经 mDNS 自动发现 Core (`ws://<Core-IP>:8088/ws/{sessionID}?device_type=ar_glasses`)
 - 2026-08-04 真机验证：6 场景（连接/卡片/单击/双击/滑动/重连）全部通过
 
 ## 设备通知策略
