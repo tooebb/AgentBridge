@@ -113,8 +113,13 @@ export async function main(): Promise<void> {
     sendEvent: (msg) => wsClient.sendEvent(msg),
   });
   let audioServer: AudioServer | null = null;
+  const gate = new UtteranceGate();
 
   wsClient.on('user_action', (action) => {
+    if ((action as UserActionInput).type === 'cancel_voice') {
+      gate.cancel();
+      return;
+    }
     void bridge.handleUserAction(action as UserActionInput).catch((err) => {
       console.error('[session] failed to handle user action:', err instanceof Error ? err.message : err);
     });
@@ -134,7 +139,6 @@ export async function main(): Promise<void> {
   process.on('SIGTERM', () => { void shutdown(); });
 
   const audioPort = Number(process.env.AGENTBRIDGE_AUDIO_PORT || 0);
-  const gate = new UtteranceGate();
   if (audioPort > 0) {
     audioServer = new AudioServer({
       port: audioPort,

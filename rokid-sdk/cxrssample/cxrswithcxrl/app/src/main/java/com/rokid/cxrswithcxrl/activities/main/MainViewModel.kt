@@ -469,6 +469,7 @@ class MainViewModel: ViewModel() {
         voiceCapture?.stop()
         voiceCapture = null
         _voiceStatus.value = ""
+        agentClient?.sendVoiceCancel()
     }
 
     private fun parseCaps(caps: Caps): String {

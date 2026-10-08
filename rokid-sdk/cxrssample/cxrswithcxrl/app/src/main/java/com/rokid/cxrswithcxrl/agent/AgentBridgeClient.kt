@@ -102,6 +102,20 @@ class AgentBridgeClient(
         return sent
     }
 
+    fun sendVoiceCancel(): Boolean {
+        val message = ClientMessage(
+            sessionId = sessionId,
+            taskId = "",
+            lastAckedSeq = lastAckedSeq,
+            action = ClientAction(type = ACTION_CANCEL_VOICE)
+        )
+        val sent = webSocket?.send(gson.toJson(message)) == true
+        if (!sent) {
+            listener.onError("Voice cancel send failed", null)
+        }
+        return sent
+    }
+
     private fun wsUrl(): String {
         val base = serverUrl.trimEnd('/').replaceFirst("^http".toRegex(), "ws")
         val params = mutableListOf("device_type=$DEVICE_TYPE_AR_GLASSES")

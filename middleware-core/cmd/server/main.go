@@ -288,6 +288,9 @@ func (s *Server) onDeviceMessage(sessionID string, msg *domain.ClientMessage) {
 
 	case domain.ActionUserMessage:
 		s.relayUserAction(sessionID, msg)
+
+	case domain.ActionCancelVoice:
+		s.relayVoiceCancel(sessionID, msg)
 	}
 }
 
@@ -326,6 +329,40 @@ func (s *Server) relayUserAction(sessionID string, msg *domain.ClientMessage) {
 	}
 	if err := s.hub.SendToDevice(sessionID, domain.DeviceAgentAdapter, deviceMsg); err != nil {
 		log.Printf("server: user action relay to agent_adapter failed: %v", err)
+	}
+	s.hub.BroadcastToDashboard(deviceMsg)
+}
+
+func (s *Server) relayVoiceCancel(sessionID string, msg *domain.ClientMessage) {
+	action := msg.Action
+	relay := &domain.UnifiedMessage{
+		ID:        uuid.New().String(),
+		SessionID: sessionID,
+		EventType: domain.EventUserAction,
+		Title:     "Voice cancel",
+		Body:      string(action.Type),
+		Severity:  domain.SeverityInfo,
+		Timestamp: time.Now(),
+		AgentID:   "middleware-core",
+		Action:    &action,
+	}
+	deviceMsg := &domain.DeviceMessage{
+		Direction: "server_to_client",
+		MessageID: uuid.New().String(),
+		SessionID: sessionID,
+		Timestamp: time.Now().UnixMilli(),
+		Event:     relay,
+		Overrides: map[domain.DeviceType]*domain.DeviceOutput{
+			domain.DeviceAgentAdapter: {
+				RenderHint: "agent_action",
+				CardTitle:  "Voice cancel",
+				CardBody:   string(action.Type),
+			},
+		},
+	}
+	// 瞬态控制信号：不落 eventStore、不参与 replay
+	if err := s.hub.SendToDevice(sessionID, domain.DeviceAgentAdapter, deviceMsg); err != nil {
+		log.Printf("server: voice cancel relay to agent_adapter failed: %v", err)
 	}
 	s.hub.BroadcastToDashboard(deviceMsg)
 }

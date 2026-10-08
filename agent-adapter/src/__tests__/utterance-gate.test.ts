@@ -21,3 +21,10 @@ test('a snapshot after markNewRecording is current', () => {
   const snap = gate.snapshot();
   assert.equal(gate.isCurrent(snap), true);
 });
+
+test('cancel invalidates a prior snapshot', () => {
+  const gate = new UtteranceGate();
+  const snap = gate.snapshot();
+  gate.cancel();
+  assert.equal(gate.isCurrent(snap), false);
+});

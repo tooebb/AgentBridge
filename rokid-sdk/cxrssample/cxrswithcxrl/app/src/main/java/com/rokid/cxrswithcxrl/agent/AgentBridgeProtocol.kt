@@ -3,6 +3,7 @@ package com.rokid.cxrswithcxrl.agent
 import com.google.gson.annotations.SerializedName
 
 const val DEVICE_TYPE_AR_GLASSES = "ar_glasses"
+const val ACTION_CANCEL_VOICE = "cancel_voice"
 
 data class DeviceMessage(
     val direction: String = "",

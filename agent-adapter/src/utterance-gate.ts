@@ -5,6 +5,10 @@ export class UtteranceGate {
     this.generation++;
   }
 
+  cancel(): void {
+    this.generation++;
+  }
+
   snapshot(): number {
     return this.generation;
   }
